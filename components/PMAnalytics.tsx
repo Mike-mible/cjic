@@ -1,33 +1,45 @@
-
 import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
-import { MATERIAL_STATS, PROGRESS_DATA, MOCK_LOGS } from '../constants';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { MATERIAL_STATS, PROGRESS_DATA } from '../constants';
 import { generateSiteInsight } from '../services/geminiService';
 import { TrendingUp, AlertTriangle, Users, Sparkles, Download, Filter } from 'lucide-react';
+import { SiteLog, Site } from '../types';
 
-const PMAnalytics: React.FC = () => {
+interface PMAnalyticsProps {
+  logs: SiteLog[];
+  sites: Site[];
+}
+
+const PMAnalytics: React.FC<PMAnalyticsProps> = ({ logs, sites }) => {
   const [aiInsight, setAiInsight] = useState<string>('Analyzing latest reports...');
   const [isLoadingInsight, setIsLoadingInsight] = useState(true);
 
   useEffect(() => {
     const fetchInsight = async () => {
+      if (logs.length === 0) {
+        setAiInsight("No site logs available for analysis.");
+        setIsLoadingInsight(false);
+        return;
+      }
       setIsLoadingInsight(true);
-      const insight = await generateSiteInsight(MOCK_LOGS);
+      const insight = await generateSiteInsight(logs);
       setAiInsight(insight || "Insight generation failed.");
       setIsLoadingInsight(false);
     };
     fetchInsight();
-  }, []);
+  }, [logs]);
+
+  const totalWorkers = logs.reduce((acc, l) => acc + (l.workersCount || 0), 0);
 
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Overall Progress', value: '64.2%', change: '+2.5%', icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-          { label: 'Active Labor', value: '248', change: '-4', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50' },
-          { label: 'Unresolved Issues', value: '12', change: '+3', icon: AlertTriangle, color: 'text-rose-600', bg: 'bg-rose-50' },
-          { label: 'Cost Variance', value: '-$24k', change: 'On Track', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          { label: 'Portfolio Progress', value: '54.2%', change: '+1.5%', icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+          { label: 'Active Personnel', value: totalWorkers.toString(), change: '+12', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50' },
+          { label: 'Pending Reviews', value: logs.filter(l => l.status === 'SUBMITTED').length.toString(), change: 'Urgent', icon: AlertTriangle, color: 'text-rose-600', bg: 'bg-rose-50' },
+          { label: 'Active Sites', value: sites.length.toString(), change: 'Stable', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         ].map((kpi, i) => (
           <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex justify-between items-start">
@@ -40,10 +52,10 @@ const PMAnalytics: React.FC = () => {
               </div>
             </div>
             <p className="text-xs mt-3 flex items-center gap-1">
-              <span className={kpi.change.startsWith('+') ? 'text-emerald-600 font-bold' : kpi.change.startsWith('-') ? 'text-rose-600 font-bold' : 'text-slate-400'}>
+              <span className={kpi.change.startsWith('+') ? 'text-emerald-600 font-bold' : kpi.change === 'Urgent' ? 'text-rose-600 font-bold' : 'text-slate-400'}>
                 {kpi.change}
               </span>
-              <span className="text-slate-400 font-medium">vs last week</span>
+              <span className="text-slate-400 font-medium">vs last month</span>
             </p>
           </div>
         ))}
@@ -77,7 +89,6 @@ const PMAnalytics: React.FC = () => {
 
       {/* Main Charts Area */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Progress Chart */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-bold text-slate-800">Cumulative Progress Trends</h3>
@@ -107,7 +118,6 @@ const PMAnalytics: React.FC = () => {
           </div>
         </div>
 
-        {/* Material Consumption */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-bold text-slate-800">Material Allocation vs Usage</h3>

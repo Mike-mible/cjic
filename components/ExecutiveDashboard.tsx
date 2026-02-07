@@ -1,9 +1,15 @@
 
 import React from 'react';
-import { SITES } from '../constants';
+import { Site } from '../types';
 import { FileText, Download, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 
-const ExecutiveDashboard: React.FC = () => {
+// Define the interface for props to fix type errors in App.tsx
+interface ExecutiveDashboardProps {
+  sites: Site[];
+}
+
+// Updated component to use ExecutiveDashboardProps
+const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ sites }) => {
   return (
     <div className="space-y-8">
       {/* Summary Section */}
@@ -26,7 +32,7 @@ const ExecutiveDashboard: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 gap-4 shrink-0">
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center w-32">
-            <p className="text-2xl font-black text-indigo-600">3</p>
+            <p className="text-2xl font-black text-indigo-600">{sites.length}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase">Active Sites</p>
           </div>
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center w-32">
@@ -38,7 +44,7 @@ const ExecutiveDashboard: React.FC = () => {
 
       {/* Projects Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {SITES.map(site => (
+        {sites.map(site => (
           <div key={site.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
             <div className="h-32 bg-slate-100 relative overflow-hidden">
                <img src={`https://picsum.photos/seed/${site.id}/400/200`} className="w-full h-full object-cover" alt={site.name} />

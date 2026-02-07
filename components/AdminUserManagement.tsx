@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
-import { MOCK_USERS, SITES } from '../constants';
-import { User, UserRole, UserStatus } from '../types';
+import { User, UserRole, UserStatus, Site } from '../types';
 import { 
   UserPlus, 
   Search, 
@@ -16,11 +15,18 @@ import {
   AlertCircle,
   XCircle,
   Edit3,
-  Users // Added missing icon import
+  Users
 } from 'lucide-react';
 
-const AdminUserManagement: React.FC = () => {
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
+// Define the interface for props to fix type errors in App.tsx
+interface AdminUserManagementProps {
+  initialUsers: User[];
+  sites: Site[];
+  onRefresh: () => Promise<void>;
+}
+
+// Updated component to use AdminUserManagementProps
+const AdminUserManagement: React.FC<AdminUserManagementProps> = ({ initialUsers, sites, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const getStatusStyle = (status: UserStatus) => {
@@ -39,6 +45,14 @@ const AdminUserManagement: React.FC = () => {
       default: return <UserPlus size={14} className="text-slate-500" />;
     }
   };
+
+  // Implement functional filtering based on search term
+  const filteredUsers = initialUsers.filter(user => 
+    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (sites.find(s => s.id === user.siteId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -67,8 +81,8 @@ const AdminUserManagement: React.FC = () => {
           />
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">
-            <Filter size={16} /> Filter Roles
+          <button onClick={onRefresh} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">
+            <Filter size={16} /> Sync Records
           </button>
           <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">
             Site Assignments
@@ -89,7 +103,7 @@ const AdminUserManagement: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {users.map((user) => (
+            {filteredUsers.map((user) => (
               <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
@@ -109,7 +123,7 @@ const AdminUserManagement: React.FC = () => {
                       {user.role.replace('_', ' ')}
                     </div>
                     <div className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold uppercase">
-                      <MapPin size={10} /> {SITES.find(s => s.id === user.siteId)?.name}
+                      <MapPin size={10} /> {sites.find(s => s.id === user.siteId)?.name || 'Unassigned'}
                     </div>
                   </div>
                 </td>

@@ -1,16 +1,15 @@
-
 import React, { useState } from 'react';
 import { Site, SiteLog, LogStatus } from '../types';
-import { SITES } from '../constants';
 import { Plus, Trash2, Save, Send, Camera } from 'lucide-react';
 
 interface SiteLogFormProps {
   onSubmit: (log: Partial<SiteLog>) => void;
+  sites: Site[];
 }
 
-const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
+const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
   const [formData, setFormData] = useState<Partial<SiteLog>>({
-    siteId: SITES[0].id,
+    siteId: sites.length > 0 ? sites[0].id : '',
     date: new Date().toISOString().split('T')[0],
     shift: 'Day',
     blockName: '',
@@ -19,6 +18,7 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
     materialUsage: [{ item: '', quantity: '', unit: 'units' }],
     equipmentUsage: [{ item: '', hours: 0 }],
     incidents: '',
+    foremanName: 'Michael Chen' // Default for demo
   });
 
   const handleAddField = (key: 'materialUsage' | 'equipmentUsage') => {
@@ -33,6 +33,14 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
     const list = [...(formData[key] as any)];
     list.splice(index, 1);
     setFormData({ ...formData, [key]: list });
+  };
+
+  const handleSubmit = () => {
+    if (!formData.siteId) {
+      alert("Please select a project site.");
+      return;
+    }
+    onSubmit(formData);
   };
 
   return (
@@ -53,7 +61,8 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
                 value={formData.siteId}
                 onChange={e => setFormData({ ...formData, siteId: e.target.value })}
               >
-                {SITES.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                <option value="">Select a Site</option>
+                {sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
               </select>
             </div>
             <div>
@@ -72,6 +81,7 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
                 {['Day', 'Night'].map(s => (
                   <button 
                     key={s}
+                    type="button"
                     onClick={() => setFormData({ ...formData, shift: s as any })}
                     className={`flex-1 py-2 text-sm font-medium rounded-lg border ${
                       formData.shift === s ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'border-slate-300 text-slate-600 bg-white'
@@ -116,6 +126,7 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-semibold text-slate-800 uppercase tracking-wide">Material Usage</label>
               <button 
+                type="button"
                 onClick={() => handleAddField('materialUsage')}
                 className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
               >
@@ -156,6 +167,7 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
                     }}
                   />
                   <button 
+                    type="button"
                     onClick={() => handleRemoveField('materialUsage', idx)}
                     className="p-2 text-slate-400 hover:text-rose-600"
                   >
@@ -173,6 +185,7 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-semibold text-slate-800 uppercase tracking-wide">Equipment Usage</label>
               <button 
+                type="button"
                 onClick={() => handleAddField('equipmentUsage')}
                 className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
               >
@@ -204,6 +217,7 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
                     }}
                   />
                   <button 
+                    type="button"
                     onClick={() => handleRemoveField('equipmentUsage', idx)}
                     className="p-2 text-slate-400 hover:text-rose-600"
                   >
@@ -240,11 +254,12 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit }) => {
         </div>
 
         <div className="bg-slate-50 px-6 py-4 flex gap-3 justify-end">
-          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+          <button type="button" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
             <Save size={16} /> Save Draft
           </button>
           <button 
-            onClick={() => onSubmit(formData)}
+            type="button"
+            onClick={handleSubmit}
             className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-md"
           >
             <Send size={16} /> Submit for Review
