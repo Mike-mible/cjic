@@ -11,7 +11,8 @@ export const MOCK_USERS: User[] = [
   { id: 'U1', name: 'James Miller', email: 'james.m@buildstream.com', role: UserRole.ADMIN, siteId: '1', status: UserStatus.ACTIVE, lastActive: '2 mins ago' },
   { id: 'U2', name: 'Michael Chen', email: 'm.chen@buildstream.com', role: UserRole.FOREMAN, siteId: '1', status: UserStatus.ACTIVE, lastActive: '1 hour ago' },
   { id: 'U3', name: 'Sarah Thompson', email: 's.thompson@buildstream.com', role: UserRole.SAFETY_OFFICER, siteId: '2', status: UserStatus.ACTIVE, lastActive: '3 hours ago' },
-  { id: 'U4', name: 'Robert Wilson', email: 'r.wilson@buildstream.com', role: UserRole.SUPERVISOR, siteId: '1', status: UserStatus.INVITED, lastActive: 'Never' },
+  // Fixed: Property 'INVITED' does not exist on type 'typeof UserStatus'. Changed to PENDING.
+  { id: 'U4', name: 'Robert Wilson', email: 'r.wilson@buildstream.com', role: UserRole.SUPERVISOR, siteId: '1', status: UserStatus.PENDING, lastActive: 'Never' },
   { id: 'U5', name: 'David Lee', email: 'd.lee@buildstream.com', role: UserRole.MANAGER, siteId: '3', status: UserStatus.SUSPENDED, lastActive: '2 days ago' },
 ];
 

@@ -1,7 +1,7 @@
+
 import { supabase } from './supabaseClient';
 import { Site, SiteLog, SafetyReport, User, UserRole, UserStatus } from '../types';
 
-// Fix: Renamed foreman_name to foremanName to match the SiteLog interface required property
 const mapLogToCamel = (log: any): SiteLog => ({
   id: log.id,
   date: log.date,
@@ -33,12 +33,61 @@ const mapUserToCamel = (user: any): User => ({
 });
 
 export const db = {
+  // Authentication & Signup
+  async signup(userData: { name: string; email: string; password: string; role: UserRole }) {
+    // 1. Determine initial status based on role
+    // Instant roles: Manager, Engineer, Executive, Admin
+    const instantRoles = [UserRole.MANAGER, UserRole.ENGINEER, UserRole.EXECUTIVE, UserRole.ADMIN, UserRole.SUPER_ADMIN];
+    const initialStatus = instantRoles.includes(userData.role) ? UserStatus.ACTIVE : UserStatus.PENDING;
+
+    // 2. Get default site for initial assignment
+    const { data: sites } = await supabase.from('sites').select('id').limit(1);
+    const siteId = sites?.[0]?.id || null;
+
+    // 3. Create user record
+    const { data, error } = await supabase
+      .from('users')
+      .insert([{
+        ...userData,
+        site_id: siteId,
+        status: initialStatus,
+        last_active: initialStatus === UserStatus.ACTIVE ? 'Just Signed Up' : 'Awaiting Approval'
+      }])
+      .select();
+
+    if (error) throw error;
+    return mapUserToCamel(data[0]);
+  },
+
+  async login(email: string) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (error) throw error;
+    return mapUserToCamel(data);
+  },
+
+  async updateStatus(id: string, status: UserStatus) {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ status })
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return mapUserToCamel(data[0]);
+  },
+
+  // Sites
   async getSites() {
     const { data, error } = await supabase.from('sites').select('*').order('name');
     if (error) throw error;
     return data as Site[];
   },
 
+  // Logs
   async getSiteLogs() {
     const { data, error } = await supabase.from('site_logs').select('*').order('timestamp', { ascending: false });
     if (error) throw error;
@@ -70,39 +119,54 @@ export const db = {
   },
 
   async getUsers() {
-    const { data, error } = await supabase.from('users').select('*').order('name');
+    const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return data.map(mapUserToCamel);
   },
 
-  async inviteUser(userData: { name: string; email: string; role: UserRole; siteId: string }) {
-    const { data, error } = await supabase.from('users').insert([{ ...userData, status: 'INVITED', last_active: 'Never' }]).select();
+  // Fixed: Property 'completeOnboarding' does not exist on type db
+  async completeOnboarding(id: string, updates: Partial<User>) {
+    const { data, error } = await supabase
+      .from('users')
+      .update({
+        phone: updates.phone,
+        avatar: updates.avatar,
+        status: updates.status,
+        last_active: 'Recently Active'
+      })
+      .eq('id', id)
+      .select();
     if (error) throw error;
     return mapUserToCamel(data[0]);
   },
 
-  async completeOnboarding(userId: string, updates: { phone: string; avatar?: string; status: UserStatus }) {
-    const { data, error } = await supabase.from('users').update({ ...updates, last_active: 'Just Now' }).eq('id', userId).select();
-    if (error) throw error;
-    return mapUserToCamel(data[0]);
-  },
-
-  async bootstrapSystem(siteData: { name: string; location: string }, userData: { name: string; email: string }) {
-    // 1. Create first site
-    const { data: site, error: siteError } = await supabase.from('sites').insert([siteData]).select();
+  // Fixed: Property 'bootstrapSystem' does not exist on type db
+  async bootstrapSystem(site: Partial<Site>, admin: Partial<User>) {
+    const { data: siteData, error: siteError } = await supabase
+      .from('sites')
+      .insert([{ 
+        name: site.name, 
+        location: site.location, 
+        progress: 0, 
+        budget: 0, 
+        spent: 0 
+      }])
+      .select();
     if (siteError) throw siteError;
 
-    // 2. Create first Super Admin
-    const { data: user, error: userError } = await supabase.from('users').insert([{
-      name: userData.name,
-      email: userData.email,
-      role: 'SUPER_ADMIN',
-      site_id: site[0].id,
-      status: 'ACTIVE',
-      last_active: 'Now (Founding Admin)'
-    }]).select();
-    if (userError) throw userError;
-
-    return { site: site[0], user: mapUserToCamel(user[0]) };
+    const { data: adminData, error: adminError } = await supabase
+      .from('users')
+      .insert([{
+        name: admin.name,
+        email: admin.email,
+        role: UserRole.SUPER_ADMIN,
+        site_id: siteData[0].id,
+        status: UserStatus.ACTIVE,
+        last_active: 'Just Initialized'
+      }])
+      .select();
+    if (adminError) throw adminError;
+    
+    return { site: siteData[0], admin: mapUserToCamel(adminData[0]) };
   }
 };

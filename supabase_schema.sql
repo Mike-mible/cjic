@@ -1,4 +1,4 @@
--- BUILDSTREAM PRO: FULL DATABASE SETUP SCRIPT
+-- BUILDSTREAM PRO: AUTH & ONBOARDING SCHEMA
 -- Paste this into your Supabase SQL Editor and run it.
 
 -- 1. CLEANUP
@@ -13,7 +13,7 @@ DROP TYPE IF EXISTS user_role CASCADE;
 
 -- 2. CREATE CUSTOM ENUMS
 CREATE TYPE user_role AS ENUM ('SUPER_ADMIN', 'ADMIN', 'FOREMAN', 'SAFETY_OFFICER', 'SUPERVISOR', 'ENGINEER', 'MANAGER', 'EXECUTIVE');
-CREATE TYPE user_status AS ENUM ('ACTIVE', 'INVITED', 'SUSPENDED', 'DEACTIVATED');
+CREATE TYPE user_status AS ENUM ('ACTIVE', 'PENDING', 'REJECTED', 'SUSPENDED', 'DEACTIVATED');
 CREATE TYPE log_status AS ENUM ('DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'FINALIZED');
 CREATE TYPE hazard_level AS ENUM ('Low', 'Medium', 'High', 'Critical');
 
@@ -33,10 +33,11 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL, -- Simulated for demo
     phone TEXT,
     role user_role NOT NULL DEFAULT 'FOREMAN',
     site_id UUID REFERENCES sites(id) ON DELETE SET NULL,
-    status user_status NOT NULL DEFAULT 'INVITED',
+    status user_status NOT NULL DEFAULT 'PENDING',
     last_active TEXT,
     avatar TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
@@ -75,6 +76,10 @@ CREATE TABLE safety_reports (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 7. INITIAL SEED (One default site for signup assignment)
+INSERT INTO sites (name, location, progress, budget, spent) VALUES
+('Default Construction Site', 'Regional Office', 0, 1000000, 0);
+
 -- 8. ENABLE RLS
 ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -87,9 +92,7 @@ CREATE POLICY "Public Read Access" ON users FOR SELECT USING (true);
 CREATE POLICY "Public Read Access" ON site_logs FOR SELECT USING (true);
 CREATE POLICY "Public Read Access" ON safety_reports FOR SELECT USING (true);
 
-CREATE POLICY "Public Insert Access" ON site_logs FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Insert Access" ON safety_reports FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public Insert Access" ON users FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public Insert Access" ON sites FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update Access" ON site_logs FOR UPDATE USING (true);
 CREATE POLICY "Public Update Access" ON users FOR UPDATE USING (true);
+CREATE POLICY "Public Update Access" ON site_logs FOR UPDATE USING (true);

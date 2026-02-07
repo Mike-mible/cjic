@@ -20,7 +20,8 @@ export enum LogStatus {
 
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
-  INVITED = 'INVITED',
+  PENDING = 'PENDING',
+  REJECTED = 'REJECTED',
   SUSPENDED = 'SUSPENDED',
   DEACTIVATED = 'DEACTIVATED'
 }
@@ -29,6 +30,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string;
   phone?: string;
   role: UserRole;
   siteId: string;

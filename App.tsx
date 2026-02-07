@@ -5,57 +5,53 @@ import SiteLogForm from './components/SiteLogForm';
 import EngineerDashboard from './components/EngineerDashboard';
 import PMAnalytics from './components/PMAnalytics';
 import ExecutiveDashboard from './components/ExecutiveDashboard';
+import CMDashboard from './components/CMDashboard';
 import AdminUserManagement from './components/AdminUserManagement';
 import SafetyReportForm from './components/SafetyReportForm';
-import OnboardingWizard from './components/OnboardingWizard';
+import { SignupForm, LoginForm } from './components/Auth/AuthForms';
+import PendingApproval from './components/Auth/PendingApproval';
 import BootstrapSystem from './components/BootstrapSystem';
+import OnboardingWizard from './components/OnboardingWizard';
 import { db } from './services/databaseService';
+import { X, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [activeRole, setActiveRole] = useState<UserRole>(UserRole.ADMIN);
   const [dbStatus, setDbStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
-  
+  const [authView, setAuthView] = useState<'login' | 'signup'>('signup');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeTab, setActiveTab] = useState<UserRole | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
   // App State
   const [sites, setSites] = useState<Site[]>([]);
   const [logs, setLogs] = useState<SiteLog[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [safetyReports, setSafetyReports] = useState<SafetyReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSystemEmpty, setIsSystemEmpty] = useState(false);
-
-  // Current User Simulation
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [sitesData, logsData, usersData, safetyData] = await Promise.all([
+      const [sitesData, logsData, usersData] = await Promise.all([
         db.getSites(),
         db.getSiteLogs(),
-        db.getUsers(),
-        db.getSafetyReports()
+        db.getUsers()
       ]);
       
       setSites(sitesData);
       setLogs(logsData);
       setUsers(usersData);
-      setSafetyReports(safetyData);
 
-      // Check if system is empty
-      if (usersData.length === 0) {
-        setIsSystemEmpty(true);
-        setDbStatus('connected');
-        return;
-      } else {
-        setIsSystemEmpty(false);
-      }
-      
-      if (usersData.length > 0 && !currentUser) {
-        setCurrentUser(usersData[0]);
-        setActiveRole(usersData[0].role);
-      } else if (currentUser) {
-        const refreshedUser = usersData.find(u => u.id === currentUser.id);
-        if (refreshedUser) setCurrentUser(refreshedUser);
+      if (currentUser) {
+        const refreshed = usersData.find(u => u.id === currentUser.id);
+        if (refreshed) {
+          setCurrentUser(refreshed);
+          if (!activeTab) setActiveTab(refreshed.role);
+          
+          // Trigger onboarding if active but missing profile details
+          if (refreshed.status === UserStatus.ACTIVE && !refreshed.phone) {
+            setShowOnboarding(true);
+          }
+        }
       }
 
       setDbStatus('connected');
@@ -65,31 +61,43 @@ const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, activeTab]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    setActiveTab(user.role);
+    localStorage.setItem('buildstream_user_email', user.email);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setActiveTab(null);
+    setShowOnboarding(false);
+    localStorage.removeItem('buildstream_user_email');
+    setAuthView('login');
+  };
+
   const handleLogSubmit = async (logData: Partial<SiteLog>) => {
     try {
       await db.createSiteLog(logData);
-      alert("Site log submitted successfully!");
+      alert("Daily site log has been pushed to the review queue.");
       fetchData();
     } catch (err) {
       alert("Error submitting site log.");
-      console.error(err);
     }
   };
 
   const handleSafetySubmit = async (reportData: Partial<SafetyReport>) => {
     try {
       await db.createSafetyReport(reportData);
-      alert("Safety report submitted successfully!");
+      alert("Safety audit recorded.");
       fetchData();
     } catch (err) {
       alert("Error submitting safety report.");
-      console.error(err);
     }
   };
 
@@ -99,77 +107,97 @@ const App: React.FC = () => {
       fetchData();
     } catch (err) {
       alert("Error updating log status.");
-      console.error(err);
     }
   };
 
-  const renderView = () => {
-    if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-sm font-medium">Syncing Project Data...</p>
-        </div>
-      );
-    }
+  const renderActiveView = () => {
+    if (!activeTab || !currentUser) return null;
 
-    switch (activeRole) {
-      case UserRole.SUPER_ADMIN:
+    switch (activeTab) {
       case UserRole.ADMIN:
+      case UserRole.SUPER_ADMIN:
         return <AdminUserManagement initialUsers={users} sites={sites} onRefresh={fetchData} />;
       case UserRole.FOREMAN:
         return <SiteLogForm onSubmit={handleLogSubmit} sites={sites} />;
       case UserRole.SAFETY_OFFICER:
         return <SafetyReportForm onSubmit={handleSafetySubmit} sites={sites} />;
-      case UserRole.SUPERVISOR:
       case UserRole.ENGINEER:
         return <EngineerDashboard logs={logs} sites={sites} onReview={handleLogReview} />;
+      case UserRole.SUPERVISOR:
+        return <CMDashboard logs={logs} sites={sites} />;
       case UserRole.MANAGER:
         return <PMAnalytics logs={logs} sites={sites} />;
       case UserRole.EXECUTIVE:
         return <ExecutiveDashboard sites={sites} />;
       default:
-        return <div className="p-12 text-center">Module Restricted</div>;
+        return <PMAnalytics logs={logs} sites={sites} />;
     }
   };
 
-  // Logic to show onboarding if user is INVITED
-  const showOnboarding = currentUser?.status === UserStatus.INVITED;
+  // 1. Initial Load
+  if (dbStatus === 'connecting') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <Loader2 className="text-indigo-500 animate-spin" size={48} />
+      </div>
+    );
+  }
 
-  if (isSystemEmpty) {
+  // 2. Fresh System Bootstrap
+  if (dbStatus === 'connected' && sites.length === 0) {
     return <BootstrapSystem onComplete={fetchData} />;
   }
 
-  return (
-    <>
-      {dbStatus === 'error' && (
-        <div className="fixed top-0 left-0 w-full bg-amber-500 text-white text-[10px] font-black py-1 px-4 z-[100] text-center uppercase tracking-widest shadow-lg">
-          Warning: Supabase connection failed. Apply SQL schema.
-        </div>
-      )}
-      
-      {showOnboarding && currentUser && (
-        <OnboardingWizard user={currentUser} onComplete={fetchData} />
-      )}
-      
-      <Layout activeRole={activeRole} setActiveRole={setActiveRole}>
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex gap-2">
-              <button onClick={fetchData} className="text-[10px] font-bold text-slate-500 hover:bg-slate-100 px-2 py-1 rounded border border-slate-200 uppercase">
-                Refresh
-              </button>
-            </div>
-            <div className="flex gap-1 bg-white p-1 rounded-lg border border-slate-200">
-              <select value={activeRole} onChange={(e) => setActiveRole(e.target.value as UserRole)} className="text-[10px] font-bold text-slate-600 outline-none uppercase px-2">
-                {Object.values(UserRole).map(role => <option key={role} value={role}>{role}</option>)}
-              </select>
-            </div>
+  // 3. Unauthenticated View
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px]">
+        {authView === 'login' ? (
+          <LoginForm onSuccess={handleAuthSuccess} onSwitch={() => setAuthView('signup')} />
+        ) : (
+          <SignupForm onSuccess={handleAuthSuccess} onSwitch={() => setAuthView('login')} />
+        )}
+      </div>
+    );
+  }
+
+  // 4. Verification Check
+  if (currentUser.status === UserStatus.PENDING) {
+    return <PendingApproval onLogout={handleLogout} />;
+  }
+
+  if (currentUser.status === UserStatus.REJECTED) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+        <div className="bg-white p-10 rounded-[3rem] text-center max-w-sm">
+          <div className="w-16 h-16 bg-rose-500 text-white rounded-full flex items-center justify-center mx-auto mb-6">
+            <X size={32} />
           </div>
-          {renderView()}
+          <h2 className="text-xl font-black uppercase text-slate-900 mb-2 tracking-tight">Access Blocked</h2>
+          <p className="text-slate-500 text-sm mb-8 font-medium">Your registration was declined. Please contact your regional Project Manager for details.</p>
+          <button onClick={handleLogout} className="px-6 py-2.5 bg-slate-100 text-slate-900 font-bold rounded-xl text-xs uppercase tracking-widest">Return to Login</button>
         </div>
-      </Layout>
-    </>
+      </div>
+    );
+  }
+
+  // 5. Onboarding Overlay
+  if (showOnboarding) {
+    return <OnboardingWizard user={currentUser} onComplete={() => { setShowOnboarding(false); fetchData(); }} />;
+  }
+
+  // 6. Primary Dashboard
+  return (
+    <Layout 
+      activeRole={activeTab as UserRole} 
+      setActiveRole={(role) => setActiveTab(role as UserRole)}
+      user={currentUser}
+      onLogout={handleLogout}
+    >
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
+        {renderActiveView()}
+      </div>
+    </Layout>
   );
 };
 
