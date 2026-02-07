@@ -1,5 +1,6 @@
 
 export enum UserRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
   FOREMAN = 'FOREMAN',
   SAFETY_OFFICER = 'SAFETY_OFFICER',
@@ -45,9 +46,7 @@ export interface SiteLog {
   foremanName: string;
   status: LogStatus;
   workersCount: number;
-  // Summary of work done during the shift
   workCompleted: string;
-  // Detailed lists used by forms and dashboards
   materialUsage: { item: string; quantity: string; unit: string }[];
   equipmentUsage: { item: string; hours: number }[];
   incidents: string;

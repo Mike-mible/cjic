@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
-import { Site, SiteLog, SafetyReport, User } from '../types';
+import { Site, SiteLog, SafetyReport, User, UserRole, UserStatus } from '../types';
 
+// Fix: Renamed foreman_name to foremanName to match the SiteLog interface required property
 const mapLogToCamel = (log: any): SiteLog => ({
   id: log.id,
   date: log.date,
@@ -17,7 +18,7 @@ const mapLogToCamel = (log: any): SiteLog => ({
   photos: log.photos || [],
   timestamp: log.timestamp,
   engineerFeedback: log.engineer_feedback
-});
+} as SiteLog);
 
 const mapUserToCamel = (user: any): User => ({
   id: user.id,
@@ -31,108 +32,77 @@ const mapUserToCamel = (user: any): User => ({
   avatar: user.avatar
 });
 
-const mapSafetyToCamel = (report: any): SafetyReport => ({
-  id: report.id,
-  date: report.date,
-  siteId: report.site_id,
-  hazardLevel: report.hazard_level,
-  ppeCompliance: report.ppe_compliance,
-  observations: report.observations,
-  actionRequired: report.action_required,
-  photos: report.photos || []
-});
-
 export const db = {
-  // Sites
   async getSites() {
     const { data, error } = await supabase.from('sites').select('*').order('name');
     if (error) throw error;
     return data as Site[];
   },
 
-  // Site Logs
   async getSiteLogs() {
-    const { data, error } = await supabase
-      .from('site_logs')
-      .select('*')
-      .order('timestamp', { ascending: false });
+    const { data, error } = await supabase.from('site_logs').select('*').order('timestamp', { ascending: false });
     if (error) throw error;
     return data.map(mapLogToCamel);
   },
 
   async createSiteLog(log: Partial<SiteLog>) {
-    const { data, error } = await supabase
-      .from('site_logs')
-      .insert([{
-        site_id: log.siteId,
-        date: log.date,
-        shift: log.shift,
-        block_name: log.blockName,
-        foreman_name: log.foremanName,
-        status: log.status || 'SUBMITTED',
-        workers_count: log.workersCount,
-        work_completed: log.workCompleted,
-        material_usage: log.materialUsage,
-        equipment_usage: log.equipmentUsage,
-        incidents: log.incidents,
-        photos: log.photos
-      }])
-      .select();
+    const { data, error } = await supabase.from('site_logs').insert([log]).select();
     if (error) throw error;
     return mapLogToCamel(data[0]);
   },
 
   async updateSiteLogStatus(id: string, status: string, feedback?: string) {
-    const { data, error } = await supabase
-      .from('site_logs')
-      .update({ 
-        status: status, 
-        engineer_feedback: feedback 
-      })
-      .eq('id', id)
-      .select();
+    const { data, error } = await supabase.from('site_logs').update({ status, engineer_feedback: feedback }).eq('id', id).select();
     if (error) throw error;
     return mapLogToCamel(data[0]);
   },
 
-  // Safety Reports
   async getSafetyReports() {
-    const { data, error } = await supabase.from('safety_reports').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('safety_reports').select('*');
     if (error) throw error;
-    return data.map(mapSafetyToCamel);
+    return data as SafetyReport[];
   },
 
   async createSafetyReport(report: Partial<SafetyReport>) {
-    const { data, error } = await supabase
-      .from('safety_reports')
-      .insert([{
-        site_id: report.siteId,
-        date: report.date,
-        hazard_level: report.hazardLevel,
-        ppe_compliance: report.ppeCompliance,
-        observations: report.observations,
-        action_required: report.actionRequired,
-        photos: report.photos
-      }])
-      .select();
+    const { data, error } = await supabase.from('safety_reports').insert([report]).select();
     if (error) throw error;
-    return mapSafetyToCamel(data[0]);
+    return data[0] as SafetyReport;
   },
 
-  // Users
   async getUsers() {
     const { data, error } = await supabase.from('users').select('*').order('name');
     if (error) throw error;
     return data.map(mapUserToCamel);
   },
 
-  async updateUserStatus(id: string, status: string) {
-    const { data, error } = await supabase
-      .from('users')
-      .update({ status })
-      .eq('id', id)
-      .select();
+  async inviteUser(userData: { name: string; email: string; role: UserRole; siteId: string }) {
+    const { data, error } = await supabase.from('users').insert([{ ...userData, status: 'INVITED', last_active: 'Never' }]).select();
     if (error) throw error;
     return mapUserToCamel(data[0]);
+  },
+
+  async completeOnboarding(userId: string, updates: { phone: string; avatar?: string; status: UserStatus }) {
+    const { data, error } = await supabase.from('users').update({ ...updates, last_active: 'Just Now' }).eq('id', userId).select();
+    if (error) throw error;
+    return mapUserToCamel(data[0]);
+  },
+
+  async bootstrapSystem(siteData: { name: string; location: string }, userData: { name: string; email: string }) {
+    // 1. Create first site
+    const { data: site, error: siteError } = await supabase.from('sites').insert([siteData]).select();
+    if (siteError) throw siteError;
+
+    // 2. Create first Super Admin
+    const { data: user, error: userError } = await supabase.from('users').insert([{
+      name: userData.name,
+      email: userData.email,
+      role: 'SUPER_ADMIN',
+      site_id: site[0].id,
+      status: 'ACTIVE',
+      last_active: 'Now (Founding Admin)'
+    }]).select();
+    if (userError) throw userError;
+
+    return { site: site[0], user: mapUserToCamel(user[0]) };
   }
 };
