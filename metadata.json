@@ -1,0 +1,7 @@
+{
+  "name": "BuildStream Pro",
+  "description": "A comprehensive construction management platform for site logging, workflow approvals, and advanced project analytics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
