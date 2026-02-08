@@ -12,8 +12,10 @@ export const MOCK_USERS: User[] = [
   { id: 'U2', name: 'Michael Chen', email: 'm.chen@buildstream.com', role: UserRole.FOREMAN, siteId: '1', status: UserStatus.ACTIVE, lastActive: '1 hour ago' },
   { id: 'U3', name: 'Sarah Thompson', email: 's.thompson@buildstream.com', role: UserRole.SAFETY_OFFICER, siteId: '2', status: UserStatus.ACTIVE, lastActive: '3 hours ago' },
   // Fixed: Property 'INVITED' does not exist on type 'typeof UserStatus'. Changed to PENDING.
-  { id: 'U4', name: 'Robert Wilson', email: 'r.wilson@buildstream.com', role: UserRole.SUPERVISOR, siteId: '1', status: UserStatus.PENDING, lastActive: 'Never' },
-  { id: 'U5', name: 'David Lee', email: 'd.lee@buildstream.com', role: UserRole.MANAGER, siteId: '3', status: UserStatus.SUSPENDED, lastActive: '2 days ago' },
+  // Fixed: Property 'SUPERVISOR' does not exist on type 'typeof UserRole'. Changed to SITE_SUPERVISOR.
+  { id: 'U4', name: 'Robert Wilson', email: 'r.wilson@buildstream.com', role: UserRole.SITE_SUPERVISOR, siteId: '1', status: UserStatus.PENDING, lastActive: 'Never' },
+  // Fixed: Property 'MANAGER' does not exist on type 'typeof UserRole'. Changed to PROJECT_MANAGER.
+  { id: 'U5', name: 'David Lee', email: 'd.lee@buildstream.com', role: UserRole.PROJECT_MANAGER, siteId: '3', status: UserStatus.SUSPENDED, lastActive: '2 days ago' },
 ];
 
 export const MOCK_LOGS: SiteLog[] = [

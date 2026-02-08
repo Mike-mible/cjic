@@ -15,7 +15,7 @@ import BootstrapSystem from './components/BootstrapSystem';
 import OnboardingWizard from './components/OnboardingWizard';
 import { db } from './services/databaseService';
 import { supabase } from './services/supabaseClient';
-import { X, Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -47,16 +47,14 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Listen for Supabase Auth changes
+  // Monitor Authentication
   useEffect(() => {
     const initAuth = async () => {
       const profile = await db.getCurrentUserProfile();
       if (profile) {
         setCurrentUser(profile);
         setActiveTab(profile.role);
-        if (profile.status === UserStatus.ACTIVE) {
-          fetchData();
-        }
+        if (profile.status === UserStatus.ACTIVE) fetchData();
       }
       setIsInitializing(false);
     };
@@ -74,6 +72,7 @@ const App: React.FC = () => {
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setActiveTab(null);
+        setAuthView('login');
       }
     });
 
@@ -82,46 +81,54 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     await db.logout();
-    setCurrentUser(null);
-    setAuthView('login');
   };
 
-  const handleLogSubmit = async (logData: Partial<SiteLog>) => {
-    await db.createSiteLog(logData);
-    alert("Site log submitted for review.");
-    fetchData();
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    setActiveTab(user.role);
   };
 
-  const handleSafetySubmit = async (reportData: Partial<SafetyReport>) => {
-    await db.createSafetyReport(reportData);
-    alert("Safety audit recorded.");
-    fetchData();
-  };
-
-  const handleLogReview = async (id: string, status: string, feedback: string) => {
-    await db.updateSiteLogStatus(id, status, feedback);
-    fetchData();
-  };
-
-  const renderActiveView = () => {
+  const renderRoleDashboard = () => {
     if (!activeTab || !currentUser) return null;
 
+    // Logic: Map Roles to Dashboards
     switch (activeTab) {
+      // Admin Dashboard
       case UserRole.ADMIN:
       case UserRole.SUPER_ADMIN:
         return <AdminUserManagement initialUsers={users} sites={sites} onRefresh={fetchData} />;
-      case UserRole.FOREMAN:
-        return <SiteLogForm onSubmit={handleLogSubmit} sites={sites} />;
-      case UserRole.SAFETY_OFFICER:
-        return <SafetyReportForm onSubmit={handleSafetySubmit} sites={sites} />;
-      case UserRole.ENGINEER:
-        return <EngineerDashboard logs={logs} sites={sites} onReview={handleLogReview} />;
-      case UserRole.SUPERVISOR:
-        return <CMDashboard logs={logs} sites={sites} />;
-      case UserRole.MANAGER:
-        return <PMAnalytics logs={logs} sites={sites} />;
+
+      // Executive Dashboard (PMs and Execs)
+      case UserRole.PROJECT_MANAGER:
+      case UserRole.CONSTRUCTION_MANAGER:
+      case UserRole.ADMIN_MANAGER:
       case UserRole.EXECUTIVE:
         return <ExecutiveDashboard sites={sites} />;
+
+      // Review Dashboard (Engineers and Architects)
+      case UserRole.SITE_ENGINEER:
+      case UserRole.ARCHITECT:
+        return <EngineerDashboard logs={logs} sites={sites} onReview={async (id, s, f) => {
+          await db.updateSiteLogStatus(id, s, f);
+          fetchData();
+        }} />;
+
+      // Field Dashboard (Foreman, Supervisors, Safety)
+      case UserRole.FOREMAN:
+      case UserRole.SITE_SUPERVISOR:
+        return <SiteLogForm onSubmit={async (log) => {
+          await db.createSiteLog(log);
+          alert("Log submitted successfully.");
+          fetchData();
+        }} sites={sites} />;
+      
+      case UserRole.SAFETY_OFFICER:
+        return <SafetyReportForm onSubmit={async (rep) => {
+          await db.createSafetyReport(rep);
+          alert("Report submitted.");
+          fetchData();
+        }} sites={sites} />;
+
       default:
         return <PMAnalytics logs={logs} sites={sites} />;
     }
@@ -140,36 +147,34 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px]">
         {authView === 'login' ? (
-          <LoginForm onSuccess={() => {}} onSwitch={() => setAuthView('signup')} />
+          <LoginForm onSuccess={handleAuthSuccess} onSwitch={() => setAuthView('signup')} />
         ) : (
-          <SignupForm onSuccess={() => {}} onSwitch={() => setAuthView('login')} />
+          <SignupForm onSuccess={handleAuthSuccess} onSwitch={() => setAuthView('login')} />
         )}
       </div>
     );
   }
 
-  // 2. Pending Approval
+  // 2. Pending Approval View
   if (currentUser.status === UserStatus.PENDING) {
     return <PendingApproval onLogout={handleLogout} />;
   }
 
-  // 3. Blocked / Rejected
-  if (currentUser.status === UserStatus.REJECTED || currentUser.status === UserStatus.SUSPENDED) {
+  // 3. Rejected Access
+  if (currentUser.status === UserStatus.REJECTED) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="bg-white p-10 rounded-[3rem] text-center max-w-sm shadow-2xl">
-          <div className="w-16 h-16 bg-rose-500 text-white rounded-full flex items-center justify-center mx-auto mb-6">
-            <X size={32} />
-          </div>
-          <h2 className="text-xl font-black uppercase text-slate-900 mb-2 tracking-tight">Access Revoked</h2>
-          <p className="text-slate-500 text-sm mb-8 font-medium">Your credentials have been deactivated by a System Administrator.</p>
+        <div className="bg-white p-12 rounded-[3rem] text-center max-w-sm shadow-2xl">
+          <X className="w-16 h-16 bg-rose-500 text-white rounded-full p-4 mx-auto mb-6" />
+          <h2 className="text-xl font-black uppercase text-slate-900 mb-2">Access Denied</h2>
+          <p className="text-slate-500 text-sm mb-8 font-medium italic">Your site credentials have been rejected by the Portfolio Manager.</p>
           <button onClick={handleLogout} className="w-full py-3 bg-slate-100 text-slate-900 font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Sign Out</button>
         </div>
       </div>
     );
   }
 
-  // 4. Main Dashboard
+  // 4. Main Application
   return (
     <Layout 
       activeRole={activeTab as UserRole} 
@@ -180,10 +185,10 @@ const App: React.FC = () => {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
         {loading && (
           <div className="flex items-center gap-2 mb-4 text-xs font-bold text-indigo-600 animate-pulse">
-            <Loader2 size={14} className="animate-spin" /> Syncing Real-time Site Data...
+            <Loader2 size={14} className="animate-spin" /> Syncing Live Station...
           </div>
         )}
-        {renderActiveView()}
+        {renderRoleDashboard()}
       </div>
     </Layout>
   );

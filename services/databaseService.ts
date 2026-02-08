@@ -35,30 +35,32 @@ const mapUserToCamel = (user: any): User => ({
 export const db = {
   // Authentication & Profile Synchronization
   async signup(userData: { name: string; email: string; password: string; role: UserRole }) {
-    // 1. Create User in Supabase Auth
+    // 1. Supabase Auth Signup
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password,
     });
 
     if (authError) throw authError;
-    if (!authData.user) throw new Error("Signup failed - Auth service unavailable");
+    if (!authData.user) throw new Error("Authentication service unreachable.");
 
-    // 2. Business Logic: Determine initial status based on role
-    // Auto-approve managers, engineers, and execs. Field staff require approval.
-    const autoApproveRoles = [
-      UserRole.MANAGER, 
-      UserRole.ENGINEER, 
-      UserRole.ADMIN, 
-      UserRole.EXECUTIVE,
-      UserRole.SUPER_ADMIN
+    // 2. Role-Based Auto-Approval Logic
+    const autoActiveRoles = [
+      UserRole.PROJECT_MANAGER,
+      UserRole.CONSTRUCTION_MANAGER,
+      UserRole.ADMIN_MANAGER,
+      UserRole.SITE_ENGINEER,
+      UserRole.ARCHITECT,
+      UserRole.ADMIN,
+      UserRole.SUPER_ADMIN,
+      UserRole.EXECUTIVE
     ];
-    
-    const initialStatus = autoApproveRoles.includes(userData.role) 
+
+    const initialStatus = autoActiveRoles.includes(userData.role) 
       ? UserStatus.ACTIVE 
       : UserStatus.PENDING;
 
-    // 3. Link Profile in public.users
+    // 3. Create public.users profile
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .insert([{
@@ -78,15 +80,12 @@ export const db = {
   },
 
   async login(email: string, password: string) {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-
-    if (authError) throw authError;
-    
-    // Profile is fetched via Auth state listener in App.tsx
-    return authData.user;
+    if (error) throw error;
+    return data.user;
   },
 
   async logout() {
@@ -107,41 +106,7 @@ export const db = {
     return mapUserToCamel(profile);
   },
 
-  // User Management
-  async updateStatus(id: string, status: UserStatus) {
-    const { data, error } = await supabase
-      .from('users')
-      .update({ status })
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return mapUserToCamel(data);
-  },
-
-  // Fix: Added completeOnboarding method to update user profile during the onboarding wizard
-  async completeOnboarding(id: string, updates: Partial<User>) {
-    const { data, error } = await supabase
-      .from('users')
-      .update({
-        phone: updates.phone,
-        avatar: updates.avatar,
-        status: updates.status
-      })
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return mapUserToCamel(data);
-  },
-
-  async getUsers() {
-    const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return data.map(mapUserToCamel);
-  },
-
-  // Site Operations
+  // Database Operations
   async getSites() {
     const { data, error } = await supabase.from('sites').select('*').order('name');
     if (error) throw error;
@@ -164,6 +129,24 @@ export const db = {
     const { data, error } = await supabase.from('site_logs').update({ status, engineer_feedback: feedback }).eq('id', id).select().single();
     if (error) throw error;
     return mapLogToCamel(data);
+  },
+
+  async getUsers() {
+    const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return data.map(mapUserToCamel);
+  },
+
+  async updateStatus(id: string, status: UserStatus) {
+    const { data, error } = await supabase.from('users').update({ status }).eq('id', id).select().single();
+    if (error) throw error;
+    return mapUserToCamel(data);
+  },
+
+  async completeOnboarding(id: string, updates: Partial<User>) {
+    const { data, error } = await supabase.from('users').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return mapUserToCamel(data);
   },
 
   async createSafetyReport(report: Partial<SafetyReport>) {

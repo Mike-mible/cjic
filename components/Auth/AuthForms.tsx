@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { UserRole } from '../../types';
+import { UserRole, UserStatus } from '../../types';
 import { db } from '../../services/databaseService';
-import { Building2, Mail, Lock, User, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Building2, Mail, Lock, User, ChevronRight, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 
 interface AuthFormProps {
   onSuccess: (user: any) => void;
@@ -12,6 +12,7 @@ interface AuthFormProps {
 export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -25,13 +26,34 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
     setError(null);
     try {
       const user = await db.signup(formData);
-      onSuccess(user);
+      if (user.status === UserStatus.PENDING) {
+        setSuccessMsg("Signup successful! Waiting for admin approval.");
+        setTimeout(() => onSuccess(user), 2000);
+      } else {
+        setSuccessMsg("Signup successful! Redirecting to your dashboard...");
+        setTimeout(() => onSuccess(user), 1500);
+      }
     } catch (err: any) {
-      setError(err.message || "Signup failed. Check your connection.");
+      setError(err.message || "Signup failed. Account may already exist.");
     } finally {
       setLoading(false);
     }
   };
+
+  if (successMsg) {
+    return (
+      <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
+        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <CheckCircle size={40} className="animate-bounce" />
+        </div>
+        <h2 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">System Ready</h2>
+        <p className="text-slate-500 font-medium leading-relaxed">{successMsg}</p>
+        <div className="mt-8 flex justify-center">
+          <Loader2 className="animate-spin text-indigo-600" size={24} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-slate-100 animate-in fade-in zoom-in-95 duration-500">
@@ -40,7 +62,7 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
           <Building2 size={32} />
         </div>
         <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">BuildStream Pro</h2>
-        <p className="text-slate-500 text-sm mt-1 font-medium italic">Create your field identity</p>
+        <p className="text-slate-500 text-sm mt-1 font-medium italic">Professional Site Registration</p>
       </div>
 
       {error && (
@@ -52,7 +74,7 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Official Name</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Full Name</label>
           <div className="relative">
             <User className="absolute left-4 top-3.5 text-slate-300" size={18} />
             <input required className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium" 
@@ -65,7 +87,7 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
           <div className="relative">
             <Mail className="absolute left-4 top-3.5 text-slate-300" size={18} />
             <input required type="email" className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium" 
-                   placeholder="robert.w@company.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                   placeholder="robert.w@buildstream.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
           </div>
         </div>
 
@@ -79,18 +101,24 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Project Assignment Role</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Professional Discipline</label>
           <select 
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-bold text-slate-700"
             value={formData.role}
             onChange={e => setFormData({...formData, role: e.target.value as UserRole})}
           >
-            <option value={UserRole.FOREMAN}>Site Foreman (Pending Approval)</option>
-            <option value={UserRole.SAFETY_OFFICER}>Safety Officer (Pending Approval)</option>
-            <option value={UserRole.SUPERVISOR}>Site Supervisor (Pending Approval)</option>
-            <option value={UserRole.ENGINEER}>Site Engineer (Auto-Active)</option>
-            <option value={UserRole.MANAGER}>Project Manager (Auto-Active)</option>
-            <option value={UserRole.EXECUTIVE}>Executive Director (Auto-Active)</option>
+            <optgroup label="Requires Approval">
+              <option value={UserRole.FOREMAN}>Site Foreman</option>
+              <option value={UserRole.SITE_SUPERVISOR}>Site Supervisor</option>
+              <option value={UserRole.SAFETY_OFFICER}>Safety Officer</option>
+            </optgroup>
+            <optgroup label="Auto-Active">
+              <option value={UserRole.SITE_ENGINEER}>Site Engineer</option>
+              <option value={UserRole.ARCHITECT}>Architect</option>
+              <option value={UserRole.PROJECT_MANAGER}>Project Manager</option>
+              <option value={UserRole.CONSTRUCTION_MANAGER}>Construction Manager</option>
+              <option value={UserRole.ADMIN_MANAGER}>Admin Manager</option>
+            </optgroup>
           </select>
         </div>
 
@@ -99,13 +127,13 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
           type="submit" 
           className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-xl flex items-center justify-center gap-2 group active:scale-95 disabled:opacity-50"
         >
-          {loading ? <Loader2 className="animate-spin" size={18} /> : "Initiate Onboarding"}
+          {loading ? <Loader2 className="animate-spin" size={18} /> : "Initialize Identity"}
           {!loading && <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />}
         </button>
       </form>
 
       <div className="mt-10 text-center pt-6 border-t border-slate-100">
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Existing Personnel?</p>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Authorized Personnel?</p>
         <button onClick={onSwitch} className="text-indigo-600 text-sm font-bold mt-1 hover:underline">Access Command Station</button>
       </div>
     </div>
@@ -124,7 +152,7 @@ export const LoginForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
     setError(null);
     try {
       await db.login(email, password);
-      // Success handled by Auth listener in App.tsx
+      // Success is handled by App.tsx listener
     } catch (err: any) {
       setError(err.message || "Invalid credentials. Identity unverified.");
     } finally {

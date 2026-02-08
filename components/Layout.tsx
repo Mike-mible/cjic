@@ -35,26 +35,31 @@ const Layout: React.FC<LayoutProps> = ({ children, activeRole, setActiveRole, us
       description: 'Manage users and sites'
     },
     { 
-      id: UserRole.MANAGER, 
+      // Fixed: Property 'MANAGER' does not exist on type 'typeof UserRole'.
+      id: UserRole.PROJECT_MANAGER, 
       label: 'Portfolio Analytics', 
       icon: LineChart, 
-      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.EXECUTIVE],
+      // Fixed: Property 'MANAGER' does not exist on type 'typeof UserRole'.
+      roles: [UserRole.ADMIN, UserRole.PROJECT_MANAGER, UserRole.EXECUTIVE],
       description: 'Budget vs Progress'
     },
     { 
-      id: UserRole.ENGINEER, 
+      // Fixed: Property 'ENGINEER' does not exist on type 'typeof UserRole'.
+      id: UserRole.SITE_ENGINEER, 
       label: 'Engineering Hub', 
       icon: CheckSquare, 
       // Fixed: Property 'ARCHITECT' does not exist on type 'typeof UserRole'.
       // Removed UserRole.ARCHITECT since it is not defined in types.ts.
-      roles: [UserRole.ADMIN, UserRole.ENGINEER, UserRole.SUPERVISOR],
+      // Fixed: Property 'ENGINEER' and 'SUPERVISOR' do not exist on type 'typeof UserRole'.
+      roles: [UserRole.ADMIN, UserRole.SITE_ENGINEER, UserRole.SITE_SUPERVISOR],
       description: 'Review site data'
     },
     { 
       id: UserRole.FOREMAN, 
       label: 'Site Operations', 
       icon: ClipboardList, 
-      roles: [UserRole.ADMIN, UserRole.FOREMAN, UserRole.SUPERVISOR],
+      // Fixed: Property 'SUPERVISOR' does not exist on type 'typeof UserRole'.
+      roles: [UserRole.ADMIN, UserRole.FOREMAN, UserRole.SITE_SUPERVISOR],
       description: 'Submit daily logs'
     },
     { 
