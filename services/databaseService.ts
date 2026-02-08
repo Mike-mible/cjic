@@ -33,9 +33,41 @@ const mapUserToCamel = (user: any): User => ({
 });
 
 export const db = {
-  // Authentication & Profile Synchronization
+  // Fix: Added bootstrapSystem method used in BootstrapSystem.tsx
+  async bootstrapSystem(site: { name: string; location: string }, admin: { name: string; email: string }) {
+    const { data: siteData, error: siteError } = await supabase
+      .from('sites')
+      .insert([{ 
+        name: site.name, 
+        location: site.location, 
+        progress: 0, 
+        budget: 0, 
+        spent: 0 
+      }])
+      .select()
+      .single();
+    
+    if (siteError) throw siteError;
+
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .insert([{
+        name: admin.name,
+        email: admin.email,
+        role: UserRole.SUPER_ADMIN,
+        status: UserStatus.ACTIVE,
+        site_id: siteData.id,
+        last_active: 'System Root'
+      }])
+      .select()
+      .single();
+      
+    if (userError) throw userError;
+    
+    return { site: siteData, admin: mapUserToCamel(userData) };
+  },
+
   async signup(userData: { name: string; email: string; password: string; role: UserRole }) {
-    // 1. Create User in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password,
@@ -44,7 +76,6 @@ export const db = {
     if (authError) throw authError;
     if (!authData.user) throw new Error("Signup failed - Auth service unavailable");
 
-    // 2. Business Logic: Determine initial status based on role
     const autoApproveRoles = [
       UserRole.PROJECT_MANAGER,
       UserRole.CONSTRUCTION_MANAGER,
@@ -60,7 +91,6 @@ export const db = {
       ? UserStatus.ACTIVE 
       : UserStatus.PENDING;
 
-    // 3. Link Profile in public.users
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .insert([{
@@ -72,9 +102,10 @@ export const db = {
         last_active: 'Just Joined'
       }])
       .select()
-      .single();
+      .maybeSingle(); // Use maybeSingle to avoid 406 errors on empty results
 
     if (profileError) throw profileError;
+    if (!profileData) throw new Error("Profile creation failed in database.");
 
     return mapUserToCamel(profileData);
   },
@@ -100,36 +131,29 @@ export const db = {
       .from('users')
       .select('*')
       .eq('id', user.id)
-      .single();
+      .maybeSingle(); // Better handling for missing profiles
 
-    if (error) return null;
+    if (error || !profile) return null;
     return mapUserToCamel(profile);
   },
 
-  // Added completeOnboarding to fix missing property error in OnboardingWizard.tsx
-  async completeOnboarding(id: string, updates: Partial<User>) {
-    const dbUpdates: any = { ...updates };
-    // Handle camelCase mapping to snake_case for the users table
-    if (updates.siteId) {
-      dbUpdates.site_id = updates.siteId;
-      delete dbUpdates.siteId;
-    }
-    if (updates.lastActive) {
-      dbUpdates.last_active = updates.lastActive;
-      delete dbUpdates.lastActive;
-    }
-
+  // Fix: Added completeOnboarding method used in OnboardingWizard.tsx
+  async completeOnboarding(userId: string, updates: Partial<User>) {
     const { data, error } = await supabase
       .from('users')
-      .update(dbUpdates)
-      .eq('id', id)
+      .update({
+        phone: updates.phone,
+        avatar: updates.avatar,
+        status: updates.status
+      })
+      .eq('id', userId)
       .select()
       .single();
+    
     if (error) throw error;
     return mapUserToCamel(data);
   },
 
-  // User Management
   async updateStatus(id: string, status: UserStatus) {
     const { data, error } = await supabase
       .from('users')
@@ -147,7 +171,6 @@ export const db = {
     return data.map(mapUserToCamel);
   },
 
-  // Site Operations
   async getSites() {
     const { data, error } = await supabase.from('sites').select('*').order('name');
     if (error) throw error;
@@ -176,11 +199,5 @@ export const db = {
     const { data, error } = await supabase.from('safety_reports').insert([report]).select().single();
     if (error) throw error;
     return data as SafetyReport;
-  },
-
-  async bootstrapSystem(site: Partial<Site>, admin: Partial<User>) {
-    const { data, error } = await supabase.from('sites').insert([site]).select().single();
-    if (error) throw error;
-    return data;
   }
 };
