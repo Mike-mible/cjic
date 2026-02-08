@@ -33,7 +33,6 @@ const mapUserToCamel = (user: any): User => ({
 });
 
 export const db = {
-  // Fix: Added bootstrapSystem method used in BootstrapSystem.tsx
   async bootstrapSystem(site: { name: string; location: string }, admin: { name: string; email: string }) {
     const { data: siteData, error: siteError } = await supabase
       .from('sites')
@@ -102,7 +101,7 @@ export const db = {
         last_active: 'Just Joined'
       }])
       .select()
-      .maybeSingle(); // Use maybeSingle to avoid 406 errors on empty results
+      .maybeSingle();
 
     if (profileError) throw profileError;
     if (!profileData) throw new Error("Profile creation failed in database.");
@@ -110,13 +109,29 @@ export const db = {
     return mapUserToCamel(profileData);
   },
 
+  /**
+   * Enhanced Login: Fetches the public profile immediately after successful auth 
+   * to prevent the "Retrieving Site Profile" flash for the user.
+   */
   async login(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) throw error;
-    return data.user;
+    if (!authData.user) throw new Error("Authentication succeeded but user identity is null.");
+
+    // Fetch the professional profile immediately
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authData.user.id)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+    if (!profile) throw new Error("Identity verified, but professional site profile not found.");
+
+    return mapUserToCamel(profile);
   },
 
   async logout() {
@@ -131,13 +146,12 @@ export const db = {
       .from('users')
       .select('*')
       .eq('id', user.id)
-      .maybeSingle(); // Better handling for missing profiles
+      .maybeSingle();
 
     if (error || !profile) return null;
     return mapUserToCamel(profile);
   },
 
-  // Fix: Added completeOnboarding method used in OnboardingWizard.tsx
   async completeOnboarding(userId: string, updates: Partial<User>) {
     const { data, error } = await supabase
       .from('users')

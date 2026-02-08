@@ -1,12 +1,11 @@
 
-// Added React to imports to resolve namespace errors
 import React, { useState } from 'react';
-import { UserRole, UserStatus } from '../../types';
+import { UserRole, UserStatus, User as UserType } from '../../types';
 import { db } from '../../services/databaseService';
 import { Building2, Mail, Lock, User, ChevronRight, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 
 interface AuthFormProps {
-  onSuccess: (user: any) => void;
+  onSuccess: (user: UserType) => void;
   onSwitch: () => void;
 }
 
@@ -157,8 +156,9 @@ export const LoginForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
     setLoading(true);
     setError(null);
     try {
-      await db.login(email, password);
-      // Actual Success is handled by App.tsx's onAuthStateChange
+      const profile = await db.login(email, password);
+      // Since login now returns the full profile, we call onSuccess immediately
+      onSuccess(profile);
     } catch (err: any) {
       setError(err.message || "Invalid credentials. Identity unverified.");
     } finally {

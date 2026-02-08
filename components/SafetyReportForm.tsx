@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { ShieldAlert, AlertTriangle, CheckCircle, Camera, Info, Send, Clock } from 'lucide-react';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { ShieldAlert, AlertTriangle, CheckCircle, Camera, Info, Send, Clock, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { Site, SafetyReport } from '../types';
 
 interface SafetyReportFormProps {
@@ -8,65 +9,131 @@ interface SafetyReportFormProps {
 }
 
 const SafetyReportForm: React.FC<SafetyReportFormProps> = ({ onSubmit, sites }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  
   const [hazardLevel, setHazardLevel] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Low');
   const [siteId, setSiteId] = useState(sites.length > 0 ? sites[0].id : '');
   const [observations, setObservations] = useState('');
   const [actionRequired, setActionRequired] = useState('');
   const [ppeCompliance, setPpeCompliance] = useState(true);
+  const [photos, setPhotos] = useState<string[]>([]);
 
-  const handleSubmit = () => {
-    if (!siteId) {
-      alert("Please select a project site.");
-      return;
+  useEffect(() => {
+    const saved = localStorage.getItem('buildstream_safety_draft');
+    if (saved) {
+      const data = JSON.parse(saved);
+      setSiteId(data.siteId || '');
+      setObservations(data.observations || '');
+      setHazardLevel(data.hazardLevel || 'Low');
     }
-    onSubmit({
-      siteId,
-      date: new Date().toISOString().split('T')[0],
-      hazardLevel,
-      ppeCompliance,
-      observations,
-      actionRequired,
-      photos: []
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('buildstream_safety_draft', JSON.stringify({ siteId, observations, hazardLevel }));
+  }, [siteId, observations, hazardLevel]);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    // Explicitly type file as File to avoid 'unknown' type error in readAsDataURL
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotos(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
     });
   };
 
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async () => {
+    if (!siteId) {
+      alert("Select the high-risk project site.");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        siteId,
+        date: new Date().toISOString().split('T')[0],
+        hazardLevel,
+        ppeCompliance,
+        observations,
+        actionRequired,
+        photos
+      });
+      localStorage.removeItem('buildstream_safety_draft');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (err) {
+      alert("Critical: Report transmission failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (showSuccess) {
+    return (
+      <div className="max-w-4xl mx-auto h-[500px] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-200 animate-in zoom-in duration-500">
+        <div className="w-24 h-24 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-6">
+          <CheckCircle2 size={48} />
+        </div>
+        <h3 className="text-2xl font-black text-slate-900 uppercase">Audit Logged</h3>
+        <p className="text-slate-500 font-medium mt-2">Safety protocol updated. HQ alerted to critical findings.</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-8 px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest"
+        >
+          New Inspection
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto pb-20 space-y-8">
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+    <div className="max-w-4xl mx-auto pb-20 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden">
         {/* Form Header */}
-        <div className="bg-rose-600 p-8 text-white relative overflow-hidden">
-           <ShieldAlert className="absolute top-0 right-0 -mr-8 -mt-8 opacity-10" size={160} />
+        <div className="bg-rose-600 p-10 text-white relative overflow-hidden">
+           <ShieldAlert className="absolute top-0 right-0 -mr-8 -mt-8 opacity-10" size={200} />
            <div className="relative z-10">
-              <h3 className="text-2xl font-black uppercase tracking-tight">Safety & Compliance Audit</h3>
-              <p className="text-rose-100 text-sm mt-1 font-medium italic opacity-80">"Safety is a choice you make today."</p>
-              <div className="flex gap-4 mt-6">
-                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
-                  <label className="block text-[9px] font-bold text-rose-200 uppercase tracking-widest">Inspection Date</label>
+              <h3 className="text-3xl font-black uppercase tracking-tight">Safety & Compliance Audit</h3>
+              <p className="text-rose-100 text-sm mt-1 font-medium italic opacity-80">"Zero Incident Protocol Engagement"</p>
+              <div className="flex gap-4 mt-8">
+                <div className="bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/20">
+                  <label className="block text-[9px] font-black text-rose-200 uppercase tracking-widest mb-1">Station Date</label>
                   <span className="text-sm font-black">{new Date().toLocaleDateString()}</span>
                 </div>
-                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
-                  <label className="block text-[9px] font-bold text-rose-200 uppercase tracking-widest">Site Inspector</label>
+                <div className="bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/20">
+                  <label className="block text-[9px] font-black text-rose-200 uppercase tracking-widest mb-1">Inspector Link</label>
                   <span className="text-sm font-black">Sarah Thompson</span>
                 </div>
               </div>
            </div>
         </div>
 
-        <div className="p-10 space-y-10">
+        <div className="p-12 space-y-12">
           {/* Site Selection */}
           <section>
             <div className="flex items-center gap-3 mb-6 border-l-4 border-rose-600 pl-4">
               <Info size={20} className="text-rose-600" />
-              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Project Context</h4>
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Station Context</h4>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Selected Site</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Observation Site</label>
               <select 
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-rose-500"
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-rose-500"
                 value={siteId}
                 onChange={e => setSiteId(e.target.value)}
               >
-                <option value="">Select a Site</option>
+                <option value="">Select Station</option>
                 {sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
               </select>
             </div>
@@ -76,29 +143,32 @@ const SafetyReportForm: React.FC<SafetyReportFormProps> = ({ onSubmit, sites }) 
           <section>
             <div className="flex items-center gap-3 mb-6 border-l-4 border-rose-600 pl-4">
               <CheckCircle size={20} className="text-rose-600" />
-              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">1. PPE Compliance Check</h4>
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">1. PPE Integrity Check</h4>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                {[
-                 'Hard Hats worn correctly',
-                 'High-vis Vests visible',
-                 'Steel-toe boots active',
-                 'Eye protection used where required',
-                 'Fall arrest systems inspected',
-                 'Ear protection deployed in noise zones'
+                 'Hard Hats deployed',
+                 'High-vis visibility',
+                 'Steel-toe footwear active',
+                 'Respiratory shields used',
+                 'Fall arrest certified',
+                 'Ear protection active'
                ].map((item, i) => (
-                 <label key={i} className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100 transition-colors">
-                    <input type="checkbox" defaultChecked className="w-5 h-5 rounded border-slate-300 text-rose-600 focus:ring-rose-500" />
-                    <span className="text-sm font-bold text-slate-700">{item}</span>
+                 <label key={i} className="flex items-center gap-4 p-5 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100 transition-colors group">
+                    <input type="checkbox" defaultChecked className="w-5 h-5 rounded-lg border-slate-300 text-rose-600 focus:ring-rose-500" />
+                    <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900">{item}</span>
                  </label>
                ))}
-               <div className="md:col-span-2 mt-4 p-4 bg-rose-50 rounded-xl border border-rose-100 flex items-center justify-between">
-                  <span className="text-sm font-bold text-rose-900">Overall Team Compliance</span>
+               <div className="md:col-span-2 mt-4 p-6 bg-rose-50 rounded-[2rem] border border-rose-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-black text-rose-900 uppercase">Compliance Verdict</span>
+                    <p className="text-[10px] text-rose-700 font-medium">Auto-calculated based on observations</p>
+                  </div>
                   <button 
                     onClick={() => setPpeCompliance(!ppeCompliance)}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase ${ppeCompliance ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}
+                    className={`px-8 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all ${ppeCompliance ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}
                   >
-                    {ppeCompliance ? 'Full Pass' : 'Violation Detected'}
+                    {ppeCompliance ? 'Verified Clean' : 'Violation Warning'}
                   </button>
                </div>
             </div>
@@ -108,19 +178,19 @@ const SafetyReportForm: React.FC<SafetyReportFormProps> = ({ onSubmit, sites }) 
           <section>
             <div className="flex items-center gap-3 mb-6 border-l-4 border-rose-600 pl-4">
               <AlertTriangle size={20} className="text-rose-600" />
-              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">2. Hazard Identification</h4>
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">2. Risk Identification</h4>
             </div>
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Hazard Severity Level</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Threat Severity Level</label>
                 <div className="grid grid-cols-4 gap-3">
                   {['Low', 'Medium', 'High', 'Critical'].map((level) => (
                     <button
                       key={level}
                       onClick={() => setHazardLevel(level as any)}
-                      className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                      className={`py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 ${
                         hazardLevel === level 
-                        ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-200' 
+                        ? 'bg-rose-600 border-rose-600 text-white shadow-xl shadow-rose-100' 
                         : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
                       }`}
                     >
@@ -130,23 +200,13 @@ const SafetyReportForm: React.FC<SafetyReportFormProps> = ({ onSubmit, sites }) 
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Observation Details</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Discovery Details</label>
                 <textarea 
                   rows={4} 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-rose-500"
-                  placeholder="Detail the safety hazard found, including precise location..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-[2rem] px-6 py-5 text-sm font-medium outline-none focus:ring-2 focus:ring-rose-500 leading-relaxed"
+                  placeholder="Describe the technical nature of the hazard discovers..."
                   value={observations}
                   onChange={e => setObservations(e.target.value)}
-                ></textarea>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Recommended Corrective Action</label>
-                <textarea 
-                  rows={3} 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-rose-500"
-                  placeholder="What must be done immediately to mitigate the risk?"
-                  value={actionRequired}
-                  onChange={e => setActionRequired(e.target.value)}
                 ></textarea>
               </div>
             </div>
@@ -156,22 +216,41 @@ const SafetyReportForm: React.FC<SafetyReportFormProps> = ({ onSubmit, sites }) 
           <section>
             <div className="flex items-center gap-3 mb-6 border-l-4 border-rose-600 pl-4">
               <Camera size={20} className="text-rose-600" />
-              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. Photographic Evidence</h4>
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. Optical Evidence</h4>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="aspect-video border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-300 hover:border-rose-300 hover:text-rose-400 cursor-pointer transition-all">
-                <Camera size={40} className="mb-2" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Upload Hazard Frame</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {photos.map((photo, i) => (
+                    <div key={i} className="aspect-video rounded-2xl overflow-hidden relative group border border-slate-100">
+                      <img src={photo} className="w-full h-full object-cover" />
+                      <button 
+                        onClick={() => removePhoto(i)}
+                        className="absolute top-2 right-2 p-1.5 bg-white text-rose-600 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="aspect-video border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-300 hover:border-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all group"
+                  >
+                    <Camera size={32} className="mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Capture Proof</span>
+                    <input type="file" ref={fileInputRef} hidden accept="image/*" multiple onChange={handlePhotoUpload} />
+                  </button>
+                </div>
               </div>
-              <div className="bg-rose-50 border border-rose-100 p-6 rounded-3xl">
-                <h5 className="text-rose-900 font-bold text-sm mb-2 flex items-center gap-2">
-                  <Info size={16} /> Guidelines
+              <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2.5rem] text-slate-300">
+                <h5 className="text-white font-black text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                  <Info size={16} className="text-rose-500" /> Forensic Guidelines
                 </h5>
-                <ul className="text-[11px] text-rose-800 space-y-2 opacity-80">
-                  <li>• Ensure the hazard is clearly visible in the frame.</li>
-                  <li>• Include a reference object for scale if necessary.</li>
-                  <li>• Capture surroundings to help location identification.</li>
-                  <li>• All photos are auto-stamped with GPS coordinates.</li>
+                <ul className="text-[11px] font-medium space-y-3 opacity-80 leading-relaxed">
+                  <li>• Focus on structural integrity or electrical exposure.</li>
+                  <li>• Include scale markers for measurement verification.</li>
+                  <li>• Frames are auto-watermarked with GPS/Timestamp.</li>
+                  <li>• Critical frames are hashed for legal compliance.</li>
                 </ul>
               </div>
             </div>
@@ -179,21 +258,19 @@ const SafetyReportForm: React.FC<SafetyReportFormProps> = ({ onSubmit, sites }) 
         </div>
 
         {/* Form Footer */}
-        <div className="bg-slate-50 p-8 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
-           <div className="flex items-center gap-3 text-rose-700 bg-rose-50 px-4 py-2.5 rounded-2xl border border-rose-100">
-             <Clock size={18} className="animate-pulse" />
-             <span className="text-xs font-bold uppercase tracking-tight">Critical hazards trigger immediate SMS alerts to PM.</span>
+        <div className="bg-slate-50 p-10 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
+           <div className="flex items-center gap-3 text-rose-700 bg-rose-100/50 px-6 py-3 rounded-2xl border border-rose-200">
+             <Clock size={20} className="animate-pulse" />
+             <span className="text-[10px] font-black uppercase tracking-widest">Real-time HQ broadcast active for critical findings</span>
            </div>
            <div className="flex gap-4 w-full md:w-auto">
-             <button className="flex-1 md:flex-none px-8 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
-               Save Draft
-             </button>
              <button 
                onClick={handleSubmit}
-               className="flex-1 md:flex-none flex items-center justify-center gap-2 px-12 py-3 bg-rose-600 text-white rounded-2xl font-black text-sm hover:bg-rose-700 shadow-xl shadow-rose-200 transition-all"
+               disabled={isSubmitting}
+               className="flex-1 md:flex-none flex items-center justify-center gap-3 px-16 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 shadow-2xl shadow-rose-200 transition-all active:scale-95 disabled:opacity-50"
              >
-               <Send size={18} />
-               Submit Report
+               {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+               Broadcast Report
              </button>
            </div>
         </div>
