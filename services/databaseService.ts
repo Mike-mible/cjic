@@ -2,8 +2,6 @@
 import { supabase } from './supabaseClient';
 import { Site, SiteLog, SafetyReport, User, UserRole, UserStatus } from '../types';
 
-// Fix: Changed property name from workers_count to workersCount to match SiteLog interface.
-// Also removed explicit cast as SiteLog to allow TypeScript to verify the object structure correctly.
 const mapLogToCamel = (log: any): SiteLog => ({
   id: log.id,
   date: log.date,
@@ -35,138 +33,106 @@ const mapUserToCamel = (user: any): User => ({
 });
 
 export const db = {
-  // Authentication & Signup
+  // Authentication & Profile Synchronization
   async signup(userData: { name: string; email: string; password: string; role: UserRole }) {
-    // 1. Supabase Auth Signup
+    // 1. Create User in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password,
     });
 
     if (authError) throw authError;
-    if (!authData.user) throw new Error("Signup failed - no user returned");
+    if (!authData.user) throw new Error("Signup failed - Auth service unavailable");
 
-    // 2. Determine initial status based on role
-    const instantRoles = [UserRole.MANAGER, UserRole.ENGINEER, UserRole.EXECUTIVE, UserRole.ADMIN, UserRole.SUPER_ADMIN];
-    const initialStatus = instantRoles.includes(userData.role) ? UserStatus.ACTIVE : UserStatus.PENDING;
+    // 2. Business Logic: Determine initial status based on role
+    // Auto-approve managers, engineers, and execs. Field staff require approval.
+    const autoApproveRoles = [
+      UserRole.MANAGER, 
+      UserRole.ENGINEER, 
+      UserRole.ADMIN, 
+      UserRole.EXECUTIVE,
+      UserRole.SUPER_ADMIN
+    ];
+    
+    const initialStatus = autoApproveRoles.includes(userData.role) 
+      ? UserStatus.ACTIVE 
+      : UserStatus.PENDING;
 
-    // 3. Get default site for initial assignment
-    const { data: sites } = await supabase.from('sites').select('id').limit(1);
-    const siteId = sites?.[0]?.id || null;
-
-    // 4. Create public profile record (Password is NOT stored here)
+    // 3. Link Profile in public.users
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .insert([{
-        id: authData.user.id, // Link to Auth ID
+        id: authData.user.id,
         name: userData.name,
         email: userData.email,
-        site_id: siteId,
         role: userData.role,
         status: initialStatus,
-        last_active: initialStatus === UserStatus.ACTIVE ? 'Just Joined' : 'Awaiting Approval'
+        last_active: 'Just Joined'
       }])
-      .select();
+      .select()
+      .single();
 
-    if (profileError) {
-      // Cleanup auth user if profile creation fails
-      console.error("Profile creation failed, cleanup required", profileError);
-      throw profileError;
-    }
+    if (profileError) throw profileError;
 
-    return mapUserToCamel(profileData[0]);
+    return mapUserToCamel(profileData);
   },
 
   async login(email: string, password: string) {
-    // 1. Authenticate with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (authError) throw authError;
-    if (!authData.user) throw new Error("Login failed");
-
-    // 2. Fetch public profile
-    const { data: profileData, error: profileError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single();
-
-    if (profileError) throw profileError;
     
-    // Update last active
-    await supabase.from('users').update({ last_active: 'Recently Active' }).eq('id', authData.user.id);
-    
-    return mapUserToCamel(profileData);
+    // Profile is fetched via Auth state listener in App.tsx
+    return authData.user;
   },
 
   async logout() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await supabase.auth.signOut();
   },
 
-  async getCurrentUser() {
+  async getCurrentUserProfile() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data: profileData, error } = await supabase
+    const { data: profile, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', user.id)
       .single();
 
     if (error) return null;
-    return mapUserToCamel(profileData);
+    return mapUserToCamel(profile);
   },
 
+  // User Management
   async updateStatus(id: string, status: UserStatus) {
     const { data, error } = await supabase
       .from('users')
       .update({ status })
       .eq('id', id)
-      .select();
+      .select()
+      .single();
     if (error) throw error;
-    return mapUserToCamel(data[0]);
+    return mapUserToCamel(data);
   },
 
-  // Sites
-  async getSites() {
-    const { data, error } = await supabase.from('sites').select('*').order('name');
+  // Fix: Added completeOnboarding method to update user profile during the onboarding wizard
+  async completeOnboarding(id: string, updates: Partial<User>) {
+    const { data, error } = await supabase
+      .from('users')
+      .update({
+        phone: updates.phone,
+        avatar: updates.avatar,
+        status: updates.status
+      })
+      .eq('id', id)
+      .select()
+      .single();
     if (error) throw error;
-    return data as Site[];
-  },
-
-  // Logs
-  async getSiteLogs() {
-    const { data, error } = await supabase.from('site_logs').select('*').order('timestamp', { ascending: false });
-    if (error) throw error;
-    return data.map(mapLogToCamel);
-  },
-
-  async createSiteLog(log: Partial<SiteLog>) {
-    const { data, error } = await supabase.from('site_logs').insert([log]).select();
-    if (error) throw error;
-    return mapLogToCamel(data[0]);
-  },
-
-  async updateSiteLogStatus(id: string, status: string, feedback?: string) {
-    const { data, error } = await supabase.from('site_logs').update({ status, engineer_feedback: feedback }).eq('id', id).select();
-    if (error) throw error;
-    return mapLogToCamel(data[0]);
-  },
-
-  async getSafetyReports() {
-    const { data, error } = await supabase.from('safety_reports').select('*');
-    if (error) throw error;
-    return data as SafetyReport[];
-  },
-
-  async createSafetyReport(report: Partial<SafetyReport>) {
-    const { data, error } = await supabase.from('safety_reports').insert([report]).select();
-    if (error) throw error;
-    return data[0] as SafetyReport;
+    return mapUserToCamel(data);
   },
 
   async getUsers() {
@@ -175,37 +141,40 @@ export const db = {
     return data.map(mapUserToCamel);
   },
 
-  async completeOnboarding(id: string, updates: Partial<User>) {
-    const { data, error } = await supabase
-      .from('users')
-      .update({
-        phone: updates.phone,
-        avatar: updates.avatar,
-        status: updates.status,
-        last_active: 'Recently Active'
-      })
-      .eq('id', id)
-      .select();
+  // Site Operations
+  async getSites() {
+    const { data, error } = await supabase.from('sites').select('*').order('name');
     if (error) throw error;
-    return mapUserToCamel(data[0]);
+    return data as Site[];
+  },
+
+  async getSiteLogs() {
+    const { data, error } = await supabase.from('site_logs').select('*').order('timestamp', { ascending: false });
+    if (error) throw error;
+    return data.map(mapLogToCamel);
+  },
+
+  async createSiteLog(log: Partial<SiteLog>) {
+    const { data, error } = await supabase.from('site_logs').insert([log]).select().single();
+    if (error) throw error;
+    return mapLogToCamel(data);
+  },
+
+  async updateSiteLogStatus(id: string, status: string, feedback?: string) {
+    const { data, error } = await supabase.from('site_logs').update({ status, engineer_feedback: feedback }).eq('id', id).select().single();
+    if (error) throw error;
+    return mapLogToCamel(data);
+  },
+
+  async createSafetyReport(report: Partial<SafetyReport>) {
+    const { data, error } = await supabase.from('safety_reports').insert([report]).select().single();
+    if (error) throw error;
+    return data as SafetyReport;
   },
 
   async bootstrapSystem(site: Partial<Site>, admin: Partial<User>) {
-    // Note: Bootstrapping in a real auth world usually involves a pre-existing auth user
-    // For this demo, we assume the sites table insert is the primary trigger.
-    const { data: siteData, error: siteError } = await supabase
-      .from('sites')
-      .insert([{ 
-        name: site.name, 
-        location: site.location, 
-        progress: 0, 
-        budget: 0, 
-        spent: 0 
-      }])
-      .select();
-    if (siteError) throw siteError;
-
-    // This part should be handled by a signup but we'll allow site creation
-    return { site: siteData[0] };
+    const { data, error } = await supabase.from('sites').insert([site]).select().single();
+    if (error) throw error;
+    return data;
   }
 };
