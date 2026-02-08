@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserRole, Site, SiteLog, User, SafetyReport, UserStatus } from './types';
 import Layout from './components/Layout';
@@ -13,6 +14,7 @@ import PendingApproval from './components/Auth/PendingApproval';
 import BootstrapSystem from './components/BootstrapSystem';
 import OnboardingWizard from './components/OnboardingWizard';
 import { db } from './services/databaseService';
+import { supabase } from './services/supabaseClient';
 import { X, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -41,19 +43,6 @@ const App: React.FC = () => {
       setLogs(logsData);
       setUsers(usersData);
 
-      if (currentUser) {
-        const refreshed = usersData.find(u => u.id === currentUser.id);
-        if (refreshed) {
-          setCurrentUser(refreshed);
-          if (!activeTab) setActiveTab(refreshed.role);
-          
-          // Trigger onboarding if active but missing profile details
-          if (refreshed.status === UserStatus.ACTIVE && !refreshed.phone) {
-            setShowOnboarding(true);
-          }
-        }
-      }
-
       setDbStatus('connected');
     } catch (err) {
       console.error("Data Fetch Error:", err);
@@ -61,24 +50,53 @@ const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, activeTab]);
+  }, []);
 
+  // Monitor Auth Changes
   useEffect(() => {
-    fetchData();
+    const checkUser = async () => {
+      const user = await db.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+        setActiveTab(user.role);
+        fetchData();
+      } else {
+        setDbStatus('connected');
+      }
+    };
+
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const user = await db.getCurrentUser();
+        setCurrentUser(user);
+        if (user) setActiveTab(user.role);
+        fetchData();
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setActiveTab(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [fetchData]);
 
   const handleAuthSuccess = (user: User) => {
     setCurrentUser(user);
     setActiveTab(user.role);
-    localStorage.setItem('buildstream_user_email', user.email);
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setActiveTab(null);
-    setShowOnboarding(false);
-    localStorage.removeItem('buildstream_user_email');
-    setAuthView('login');
+  const handleLogout = async () => {
+    try {
+      await db.logout();
+      setCurrentUser(null);
+      setActiveTab(null);
+      setShowOnboarding(false);
+      setAuthView('login');
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
   };
 
   const handleLogSubmit = async (logData: Partial<SiteLog>) => {
@@ -143,8 +161,8 @@ const App: React.FC = () => {
     );
   }
 
-  // 2. Fresh System Bootstrap
-  if (dbStatus === 'connected' && sites.length === 0) {
+  // 2. Fresh System Bootstrap (if no sites exist)
+  if (dbStatus === 'connected' && sites.length === 0 && !currentUser) {
     return <BootstrapSystem onComplete={fetchData} />;
   }
 
@@ -181,8 +199,8 @@ const App: React.FC = () => {
     );
   }
 
-  // 5. Onboarding Overlay
-  if (showOnboarding) {
+  // 5. Onboarding Overlay (Optional check for missing profile data)
+  if (showOnboarding || (currentUser.status === UserStatus.ACTIVE && !currentUser.phone)) {
     return <OnboardingWizard user={currentUser} onComplete={() => { setShowOnboarding(false); fetchData(); }} />;
   }
 

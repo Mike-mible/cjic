@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { UserRole } from '../../types';
 import { db } from '../../services/databaseService';
-import { Building2, Mail, Lock, User, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Building2, Mail, Lock, User, ChevronRight, AlertCircle } from 'lucide-react';
 
 interface AuthFormProps {
   onSuccess: (user: any) => void;
@@ -10,6 +11,7 @@ interface AuthFormProps {
 
 export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -20,11 +22,12 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     try {
       const user = await db.signup(formData);
       onSuccess(user);
     } catch (err: any) {
-      alert(err.message || "Signup failed");
+      setError(err.message || "Signup failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -39,6 +42,13 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
         <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Join BuildStream</h2>
         <p className="text-slate-500 text-sm mt-1 font-medium italic">Empowering Modern Construction</p>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 text-sm font-medium animate-in slide-in-from-top-2">
+          <AlertCircle size={18} />
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -109,16 +119,19 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
 
 export const LoginForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     try {
-      const user = await db.login(email);
+      const user = await db.login(email, password);
       onSuccess(user);
     } catch (err: any) {
-      alert(err.message || "Login failed - make sure the user exists");
+      setError(err.message || "Invalid credentials. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -134,6 +147,13 @@ export const LoginForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
         <p className="text-slate-500 text-sm mt-1 font-medium">Enter your credentials to access site data</p>
       </div>
 
+      {error && (
+        <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 text-sm font-medium animate-in slide-in-from-top-2">
+          <AlertCircle size={18} />
+          {error}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Work Email</label>
@@ -148,8 +168,8 @@ export const LoginForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Password</label>
           <div className="relative">
             <Lock className="absolute left-3 top-3 text-slate-300" size={18} />
-            <input required type="password" defaultValue="password" className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
-                   placeholder="••••••••" />
+            <input required type="password" placeholder="••••••••" className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                   value={password} onChange={e => setPassword(e.target.value)} />
           </div>
         </div>
 
