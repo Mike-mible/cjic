@@ -1,4 +1,5 @@
 
+// Added React to imports to resolve namespace errors
 import React, { useState } from 'react';
 import { UserRole, UserStatus } from '../../types';
 import { db } from '../../services/databaseService';
@@ -12,7 +13,8 @@ interface AuthFormProps {
 export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [successStatus, setSuccessStatus] = useState<UserStatus | null>(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -26,28 +28,32 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
     setError(null);
     try {
       const user = await db.signup(formData);
-      if (user.status === UserStatus.PENDING) {
-        setSuccessMsg("Signup successful! Waiting for admin approval.");
-        setTimeout(() => onSuccess(user), 2000);
-      } else {
-        setSuccessMsg("Signup successful! Redirecting to your dashboard...");
-        setTimeout(() => onSuccess(user), 1500);
-      }
+      setSuccessStatus(user.status);
+      
+      // Delay transition to allow user to read the success message
+      setTimeout(() => {
+        onSuccess(user);
+      }, 2000);
+      
     } catch (err: any) {
-      setError(err.message || "Signup failed. Account may already exist.");
+      setError(err.message || "Registration failed. Identity unverified.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (successMsg) {
+  if (successStatus) {
     return (
       <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md text-center animate-in fade-in zoom-in duration-500">
-        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-50">
           <CheckCircle size={40} className="animate-bounce" />
         </div>
-        <h2 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">System Ready</h2>
-        <p className="text-slate-500 font-medium leading-relaxed">{successMsg}</p>
+        <h2 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">System Identity Recorded</h2>
+        <p className="text-slate-500 font-medium leading-relaxed px-4 text-sm">
+          {successStatus === UserStatus.ACTIVE 
+            ? "Signup successful! Establishing dashboard connection..." 
+            : "Signup successful! Awaiting administrative verification."}
+        </p>
         <div className="mt-8 flex justify-center">
           <Loader2 className="animate-spin text-indigo-600" size={24} />
         </div>
@@ -62,7 +68,7 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
           <Building2 size={32} />
         </div>
         <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">BuildStream Pro</h2>
-        <p className="text-slate-500 text-sm mt-1 font-medium italic">Professional Site Registration</p>
+        <p className="text-slate-500 text-sm mt-1 font-medium italic">New Professional Deployment</p>
       </div>
 
       {error && (
@@ -74,7 +80,7 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Full Name</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Full Legal Name</label>
           <div className="relative">
             <User className="absolute left-4 top-3.5 text-slate-300" size={18} />
             <input required className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium" 
@@ -83,7 +89,7 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Corporate Email</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Email Identifier</label>
           <div className="relative">
             <Mail className="absolute left-4 top-3.5 text-slate-300" size={18} />
             <input required type="email" className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium" 
@@ -92,7 +98,7 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Password</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Secure Token</label>
           <div className="relative">
             <Lock className="absolute left-4 top-3.5 text-slate-300" size={18} />
             <input required type="password" minLength={6} className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium" 
@@ -101,18 +107,18 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Professional Discipline</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Field Discipline (Role)</label>
           <select 
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-bold text-slate-700"
             value={formData.role}
             onChange={e => setFormData({...formData, role: e.target.value as UserRole})}
           >
-            <optgroup label="Requires Approval">
+            <optgroup label="Requires Verification">
               <option value={UserRole.FOREMAN}>Site Foreman</option>
               <option value={UserRole.SITE_SUPERVISOR}>Site Supervisor</option>
               <option value={UserRole.SAFETY_OFFICER}>Safety Officer</option>
             </optgroup>
-            <optgroup label="Auto-Active">
+            <optgroup label="Auto-Validated Professional">
               <option value={UserRole.SITE_ENGINEER}>Site Engineer</option>
               <option value={UserRole.ARCHITECT}>Architect</option>
               <option value={UserRole.PROJECT_MANAGER}>Project Manager</option>
@@ -125,16 +131,16 @@ export const SignupForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => 
         <button 
           disabled={loading}
           type="submit" 
-          className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-xl flex items-center justify-center gap-2 group active:scale-95 disabled:opacity-50"
+          className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-xl flex items-center justify-center gap-2 group active:scale-95 disabled:opacity-50"
         >
-          {loading ? <Loader2 className="animate-spin" size={18} /> : "Initialize Identity"}
+          {loading ? <Loader2 className="animate-spin" size={18} /> : "Initiate Deployment"}
           {!loading && <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />}
         </button>
       </form>
 
       <div className="mt-10 text-center pt-6 border-t border-slate-100">
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Authorized Personnel?</p>
-        <button onClick={onSwitch} className="text-indigo-600 text-sm font-bold mt-1 hover:underline">Access Command Station</button>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Existing Profile?</p>
+        <button onClick={onSwitch} className="text-indigo-600 text-sm font-bold mt-1 hover:underline">Access Command Center</button>
       </div>
     </div>
   );
@@ -152,7 +158,7 @@ export const LoginForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
     setError(null);
     try {
       await db.login(email, password);
-      // Success is handled by App.tsx listener
+      // Actual Success is handled by App.tsx's onAuthStateChange
     } catch (err: any) {
       setError(err.message || "Invalid credentials. Identity unverified.");
     } finally {
@@ -199,7 +205,7 @@ export const LoginForm: React.FC<AuthFormProps> = ({ onSuccess, onSwitch }) => {
         <button 
           disabled={loading}
           type="submit" 
-          className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 group active:scale-95 disabled:opacity-50"
+          className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 group active:scale-95 disabled:opacity-50"
         >
           {loading ? <Loader2 className="animate-spin" size={18} /> : "Validate & Connect"}
           {!loading && <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />}

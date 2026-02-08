@@ -11,8 +11,6 @@ import AdminUserManagement from './components/AdminUserManagement';
 import SafetyReportForm from './components/SafetyReportForm';
 import { SignupForm, LoginForm } from './components/Auth/AuthForms';
 import PendingApproval from './components/Auth/PendingApproval';
-import BootstrapSystem from './components/BootstrapSystem';
-import OnboardingWizard from './components/OnboardingWizard';
 import { db } from './services/databaseService';
 import { supabase } from './services/supabaseClient';
 import { Loader2, X } from 'lucide-react';
@@ -47,9 +45,9 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Monitor Authentication
+  // Monitor Authentication and Profile
   useEffect(() => {
-    const initAuth = async () => {
+    const syncProfile = async () => {
       const profile = await db.getCurrentUserProfile();
       if (profile) {
         setCurrentUser(profile);
@@ -59,8 +57,10 @@ const App: React.FC = () => {
       setIsInitializing(false);
     };
 
-    initAuth();
+    // 1. Initial Load
+    syncProfile();
 
+    // 2. Auth State Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         const profile = await db.getCurrentUserProfile();
@@ -91,21 +91,20 @@ const App: React.FC = () => {
   const renderRoleDashboard = () => {
     if (!activeTab || !currentUser) return null;
 
-    // Logic: Map Roles to Dashboards
     switch (activeTab) {
-      // Admin Dashboard
+      // 1. Admin Dashboards
       case UserRole.ADMIN:
       case UserRole.SUPER_ADMIN:
         return <AdminUserManagement initialUsers={users} sites={sites} onRefresh={fetchData} />;
 
-      // Executive Dashboard (PMs and Execs)
+      // 2. Executive Dashboards
       case UserRole.PROJECT_MANAGER:
       case UserRole.CONSTRUCTION_MANAGER:
       case UserRole.ADMIN_MANAGER:
       case UserRole.EXECUTIVE:
         return <ExecutiveDashboard sites={sites} />;
 
-      // Review Dashboard (Engineers and Architects)
+      // 3. Review Dashboards
       case UserRole.SITE_ENGINEER:
       case UserRole.ARCHITECT:
         return <EngineerDashboard logs={logs} sites={sites} onReview={async (id, s, f) => {
@@ -113,7 +112,7 @@ const App: React.FC = () => {
           fetchData();
         }} />;
 
-      // Field Dashboard (Foreman, Supervisors, Safety)
+      // 4. Field Dashboards
       case UserRole.FOREMAN:
       case UserRole.SITE_SUPERVISOR:
         return <SiteLogForm onSubmit={async (log) => {
@@ -142,7 +141,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 1. Unauthenticated
+  // 1. Unauthenticated State
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px]">
@@ -155,26 +154,26 @@ const App: React.FC = () => {
     );
   }
 
-  // 2. Pending Approval View
+  // 2. Pending Approval State
   if (currentUser.status === UserStatus.PENDING) {
     return <PendingApproval onLogout={handleLogout} />;
   }
 
-  // 3. Rejected Access
-  if (currentUser.status === UserStatus.REJECTED) {
+  // 3. Unauthorized/Suspended State
+  if (currentUser.status === UserStatus.REJECTED || currentUser.status === UserStatus.SUSPENDED) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
         <div className="bg-white p-12 rounded-[3rem] text-center max-w-sm shadow-2xl">
-          <X className="w-16 h-16 bg-rose-500 text-white rounded-full p-4 mx-auto mb-6" />
-          <h2 className="text-xl font-black uppercase text-slate-900 mb-2">Access Denied</h2>
-          <p className="text-slate-500 text-sm mb-8 font-medium italic">Your site credentials have been rejected by the Portfolio Manager.</p>
-          <button onClick={handleLogout} className="w-full py-3 bg-slate-100 text-slate-900 font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Sign Out</button>
+          <X className="w-16 h-16 bg-rose-500 text-white rounded-full p-4 mx-auto mb-6 shadow-xl shadow-rose-200" />
+          <h2 className="text-xl font-black uppercase text-slate-900 mb-2">Access Revoked</h2>
+          <p className="text-slate-500 text-sm mb-8 font-medium italic leading-relaxed">Your site credentials have been suspended or rejected by System Administration.</p>
+          <button onClick={handleLogout} className="w-full py-4 bg-slate-100 text-slate-900 font-bold rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95">Sign Out</button>
         </div>
       </div>
     );
   }
 
-  // 4. Main Application
+  // 4. Authenticated & Active State
   return (
     <Layout 
       activeRole={activeTab as UserRole} 
@@ -185,7 +184,7 @@ const App: React.FC = () => {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
         {loading && (
           <div className="flex items-center gap-2 mb-4 text-xs font-bold text-indigo-600 animate-pulse">
-            <Loader2 size={14} className="animate-spin" /> Syncing Live Station...
+            <Loader2 size={14} className="animate-spin" /> Syncing Command Station...
           </div>
         )}
         {renderRoleDashboard()}

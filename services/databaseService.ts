@@ -35,17 +35,17 @@ const mapUserToCamel = (user: any): User => ({
 export const db = {
   // Authentication & Profile Synchronization
   async signup(userData: { name: string; email: string; password: string; role: UserRole }) {
-    // 1. Supabase Auth Signup
+    // 1. Create User in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password,
     });
 
     if (authError) throw authError;
-    if (!authData.user) throw new Error("Authentication service unreachable.");
+    if (!authData.user) throw new Error("Signup failed - Auth service unavailable");
 
-    // 2. Role-Based Auto-Approval Logic
-    const autoActiveRoles = [
+    // 2. Business Logic: Determine initial status based on role
+    const autoApproveRoles = [
       UserRole.PROJECT_MANAGER,
       UserRole.CONSTRUCTION_MANAGER,
       UserRole.ADMIN_MANAGER,
@@ -55,12 +55,12 @@ export const db = {
       UserRole.SUPER_ADMIN,
       UserRole.EXECUTIVE
     ];
-
-    const initialStatus = autoActiveRoles.includes(userData.role) 
+    
+    const initialStatus = autoApproveRoles.includes(userData.role) 
       ? UserStatus.ACTIVE 
       : UserStatus.PENDING;
 
-    // 3. Create public.users profile
+    // 3. Link Profile in public.users
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .insert([{
@@ -106,7 +106,48 @@ export const db = {
     return mapUserToCamel(profile);
   },
 
-  // Database Operations
+  // Added completeOnboarding to fix missing property error in OnboardingWizard.tsx
+  async completeOnboarding(id: string, updates: Partial<User>) {
+    const dbUpdates: any = { ...updates };
+    // Handle camelCase mapping to snake_case for the users table
+    if (updates.siteId) {
+      dbUpdates.site_id = updates.siteId;
+      delete dbUpdates.siteId;
+    }
+    if (updates.lastActive) {
+      dbUpdates.last_active = updates.lastActive;
+      delete dbUpdates.lastActive;
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return mapUserToCamel(data);
+  },
+
+  // User Management
+  async updateStatus(id: string, status: UserStatus) {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ status })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return mapUserToCamel(data);
+  },
+
+  async getUsers() {
+    const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return data.map(mapUserToCamel);
+  },
+
+  // Site Operations
   async getSites() {
     const { data, error } = await supabase.from('sites').select('*').order('name');
     if (error) throw error;
@@ -129,24 +170,6 @@ export const db = {
     const { data, error } = await supabase.from('site_logs').update({ status, engineer_feedback: feedback }).eq('id', id).select().single();
     if (error) throw error;
     return mapLogToCamel(data);
-  },
-
-  async getUsers() {
-    const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return data.map(mapUserToCamel);
-  },
-
-  async updateStatus(id: string, status: UserStatus) {
-    const { data, error } = await supabase.from('users').update({ status }).eq('id', id).select().single();
-    if (error) throw error;
-    return mapUserToCamel(data);
-  },
-
-  async completeOnboarding(id: string, updates: Partial<User>) {
-    const { data, error } = await supabase.from('users').update(updates).eq('id', id).select().single();
-    if (error) throw error;
-    return mapUserToCamel(data);
   },
 
   async createSafetyReport(report: Partial<SafetyReport>) {
