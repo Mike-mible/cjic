@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserRole, Site, SiteLog, User, UserStatus } from './types';
+import { UserRole, Site, SiteLog, User, UserStatus, LogStatus } from './types';
 import Layout from './components/Layout';
 import SiteLogForm from './components/SiteLogForm';
 import EngineerDashboard from './components/EngineerDashboard';
@@ -18,6 +18,7 @@ import { Loader2, X, AlertCircle, RefreshCw, LogOut } from 'lucide-react';
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<User | null>(null);
+  const [activeViewRole, setActiveViewRole] = useState<UserRole | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'signup'>('signup');
@@ -57,6 +58,7 @@ const App: React.FC = () => {
       setSession(session);
       if (!session) {
         setProfile(null);
+        setActiveViewRole(null);
         setAuthView('login');
       }
     });
@@ -70,6 +72,7 @@ const App: React.FC = () => {
     try {
       const p = await db.getCurrentUserProfile();
       setProfile(p);
+      if (p) setActiveViewRole(p.role);
       if (p?.status === UserStatus.ACTIVE) fetchData();
     } catch (err) {
       console.error("Profile Load Error:", err);
@@ -88,11 +91,15 @@ const App: React.FC = () => {
     await db.logout();
     setSession(null);
     setProfile(null);
+    setActiveViewRole(null);
+    // Force a full clean state for the next user
+    localStorage.removeItem('buildstream_log_draft');
+    localStorage.removeItem('buildstream_safety_draft');
   };
 
   const handleAuthSuccess = (user: User) => {
-    // Inject user directly to bypass loading screen delay
     setProfile(user);
+    setActiveViewRole(user.role);
     if (user.status === UserStatus.ACTIVE) fetchData();
   };
 
@@ -172,8 +179,15 @@ const App: React.FC = () => {
   }
 
   // 7. Success: Dashboard View
+  const currentRole = activeViewRole || profile.role;
+
   return (
-    <Layout activeRole={profile.role} setActiveRole={() => {}} user={profile} onLogout={handleLogout}>
+    <Layout 
+      activeRole={currentRole} 
+      setActiveRole={(role) => setActiveViewRole(role)} 
+      user={profile} 
+      onLogout={handleLogout}
+    >
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
         {dataLoading && (
           <div className="flex items-center gap-2 mb-4 text-[10px] font-black text-indigo-600 animate-pulse bg-indigo-50 w-fit px-3 py-1.5 rounded-full border border-indigo-100">
@@ -182,7 +196,7 @@ const App: React.FC = () => {
         )}
         
         {(() => {
-          switch (profile.role) {
+          switch (currentRole) {
             case UserRole.ADMIN:
             case UserRole.SUPER_ADMIN:
               return <AdminUserManagement initialUsers={users} sites={sites} onRefresh={fetchData} />;
@@ -199,15 +213,45 @@ const App: React.FC = () => {
               }} />;
             case UserRole.FOREMAN:
             case UserRole.SITE_SUPERVISOR:
-              return <SiteLogForm onSubmit={async (log) => {
-                await db.createSiteLog(log);
-                alert("Daily log submitted.");
-                fetchData();
-              }} sites={sites} />;
+              return (
+                <div className="space-y-12">
+                   <SiteLogForm onSubmit={async (log) => {
+                    await db.createSiteLog({ ...log, foremanName: profile.name });
+                    if (log.status === LogStatus.DRAFT) {
+                      alert("Station Update: Draft saved to cloud storage.");
+                    } else {
+                      alert("Station Update: Daily log transmitted to engineering hub.");
+                    }
+                    fetchData();
+                  }} sites={sites} />
+                  
+                  {/* Personal History for Foreman */}
+                  <div className="max-w-4xl mx-auto mt-12">
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Recent Shift Transmissions</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {logs.filter(l => l.foremanName === profile.name).slice(0, 4).map(log => (
+                        <div key={log.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-center group hover:border-indigo-500 transition-all">
+                          <div>
+                            <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{log.date}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{log.blockName}</p>
+                          </div>
+                          <span className={`text-[9px] px-2 py-1 rounded-lg font-black uppercase tracking-widest border ${
+                            log.status === LogStatus.APPROVED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            log.status === LogStatus.REJECTED ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                            'bg-amber-50 text-amber-600 border-amber-100'
+                          }`}>
+                            {log.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
             case UserRole.SAFETY_OFFICER:
               return <SafetyReportForm onSubmit={async (rep) => {
                 await db.createSafetyReport(rep);
-                alert("Safety report submitted.");
+                alert("Station Alert: Safety report broadcast to HQ.");
                 fetchData();
               }} sites={sites} />;
             default:

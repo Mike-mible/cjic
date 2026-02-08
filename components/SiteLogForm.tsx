@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Site, SiteLog, LogStatus } from '../types';
-import { Plus, Trash2, Save, Send, Camera, X, CheckCircle2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Save, Send, Camera, X, CheckCircle2, Loader2, CloudCheck } from 'lucide-react';
 
 interface SiteLogFormProps {
   onSubmit: (log: Partial<SiteLog>) => void;
@@ -12,6 +12,8 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
+  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<Partial<SiteLog>>({
     siteId: sites.length > 0 ? sites[0].id : '',
@@ -24,7 +26,7 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
     equipmentUsage: [{ item: '', hours: 0 }],
     incidents: '',
     photos: [],
-    foremanName: 'Michael Chen' 
+    foremanName: '' // Will be injected by App.tsx
   });
 
   // LocalStorage persistence for data safety
@@ -61,7 +63,6 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
     const files = e.target.files;
     if (!files) return;
 
-    // Explicitly type file as File to avoid 'unknown' type error in readAsDataURL
     Array.from(files).forEach((file: File) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -83,11 +84,16 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
 
   const handleAction = async (status: LogStatus) => {
     if (!formData.siteId) {
-      alert("Please select a project site station.");
+      alert("Validation Error: Select a project site station.");
       return;
     }
     
-    setIsSubmitting(true);
+    if (status === LogStatus.DRAFT) {
+      setIsDrafting(true);
+    } else {
+      setIsSubmitting(true);
+    }
+
     try {
       await onSubmit({ ...formData, status });
       if (status === LogStatus.SUBMITTED) {
@@ -95,28 +101,31 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
       } else {
-        alert("Draft saved to station cloud.");
+        setLastDraftSavedAt(new Date().toLocaleTimeString());
+        setTimeout(() => setIsDrafting(false), 2000);
       }
     } catch (err) {
-      alert("Transmission failed. Retrying...");
+      alert("Transmission Error: Connection failed. Retrying...");
     } finally {
-      setIsSubmitting(false);
+      if (status === LogStatus.SUBMITTED) {
+        setIsSubmitting(false);
+      }
     }
   };
 
   if (showSuccess) {
     return (
       <div className="max-w-4xl mx-auto h-[500px] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-200 animate-in zoom-in duration-500">
-        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
+        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-xl shadow-emerald-50">
           <CheckCircle2 size={48} />
         </div>
-        <h3 className="text-2xl font-black text-slate-900 uppercase">Log Transmitted</h3>
-        <p className="text-slate-500 font-medium mt-2">Submission is now in Engineering Review queue.</p>
+        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Shift Finalized</h3>
+        <p className="text-slate-500 font-medium mt-2">Log transmitted to engineering hub for resource audit.</p>
         <button 
           onClick={() => window.location.reload()}
-          className="mt-8 px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest"
+          className="mt-8 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all active:scale-95"
         >
-          Draft New Entry
+          Draft Next Shift
         </button>
       </div>
     );
@@ -130,9 +139,16 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
             <h3 className="font-black text-white uppercase tracking-tight text-lg">Daily Field Report</h3>
             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Station Protocol v2.4</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-            <span className="text-[10px] text-indigo-400 uppercase font-black tracking-widest">Active Drafting</span>
+          <div className="flex items-center gap-4">
+            {lastDraftSavedAt && !isDrafting && (
+              <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
+                <CloudCheck size={12} /> Last Saved: {lastDraftSavedAt}
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+              <span className="text-[10px] text-indigo-400 uppercase font-black tracking-widest">Active Drafting</span>
+            </div>
           </div>
         </div>
         
@@ -340,20 +356,21 @@ const SiteLogForm: React.FC<SiteLogFormProps> = ({ onSubmit, sites }) => {
         <div className="bg-slate-50 p-8 flex flex-col md:flex-row gap-4 justify-end border-t border-slate-100">
           <button 
             type="button" 
-            disabled={isSubmitting}
+            disabled={isSubmitting || isDrafting}
             onClick={() => handleAction(LogStatus.DRAFT)}
-            className="flex items-center justify-center gap-2 px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-600 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-8 py-4 text-[10px] font-black uppercase tracking-widest text-slate-600 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50 min-w-[200px]"
           >
-            <Save size={16} /> Save Station Draft
+            {isDrafting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            {isDrafting ? 'Syncing Draft...' : 'Save Station Draft'}
           </button>
           <button 
             type="button"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isDrafting}
             onClick={() => handleAction(LogStatus.SUBMITTED)}
-            className="flex items-center justify-center gap-2 px-12 py-4 text-[10px] font-black uppercase tracking-widest text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-12 py-4 text-[10px] font-black uppercase tracking-widest text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50 min-w-[220px]"
           >
             {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            Finalize Transmission
+            {isSubmitting ? 'Transmitting...' : 'Finalize Transmission'}
           </button>
         </div>
       </div>
